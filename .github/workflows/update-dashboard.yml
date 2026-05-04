@@ -1,0 +1,29 @@
+name: Auto-Update Dashboard
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Alle 60 Minuten
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Generate Dashboard
+        run: node generate-dashboard-auto.js
+
+      - name: Commit & Push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Auto-Update Bot"
+          git add index.html
+          git commit -m "✅ Auto-Update Dashboard - $(date +%Y-%m-%d\ %H:%M:%S\ CEST)" --allow-empty
+          git push
