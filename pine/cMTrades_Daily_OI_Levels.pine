@@ -855,8 +855,10 @@ alertcondition(atOrderblock or atBreaker, title = "Preis an Orderblock oder Brea
 
 // ── Trend-Tabelle ──────────────────────────────────────────
 // Minimalistisch (Entwurf Chico 09.10.): Zeitrahmen als Spalten, Punkte statt Farbflächen, schwarze Schrift, dünne Linien, ohne Hintergrund
-// ⚪ = Long / bullish / über   ⚫ = Short / bearish / unter   🔴 = gegen die Cloud ausgebrochen   ◐ = innen   – = keine Daten
-punkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : s == 0 ? "🔴" : "–"
+// Struktur + Lage: ⚪ = bullish / über   ⚫ = bearish / unter   ◐ = innen   – = keine Daten
+punkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : "–"
+// EMA-Cloud (Chico 09.10.): ⚪ bullish · 🔴 bearish (Kurs in/unter der Cloud) · ◐ rot = bearish, aber nach oben ausgebrochen · ◑ = bullish, aber nach unten ausgebrochen
+emaPunkt(int s, string pf) => s == 1 ? "⚪" : s == -1 ? "🔴" : s == 0 ? (pf == "↑" ? "◐" : "◑") : "–"
 vaSt(hi, lo) => na(hi) or na(lo) ? 2 : close > hi ? 1 : close < lo ? -1 : 0
 vwSt(v) => na(v) ? 2 : close > v ? 1 : -1
 lagePunkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : s == 0 ? "◐" : "–"
@@ -876,12 +878,12 @@ breit(int c0, int c1, int r, string t, color tc, string sz, string ha = text.ali
         table.merge_cells(tb, c0, r, c1, r)
 
 // Spalte je Zeitrahmen: Name / Beschriftung / Punkte EMA + Struktur / ADX
-tfSpalte(int c, int r, string name, int s, int sd, float a, float aV) =>
+tfSpalte(int c, int r, string name, int s, string pf, int sd, float a, float aV) =>
     kons   = na(a) or a < adxSw
     steigt = not na(aV) and a > aV
     zelle(c, r, name, tTxtH, tGr, text.align_center, 1)
     zelle(c, r + 1, "EMA · ST", tGrau, grKlein)
-    zelle(c, r + 2, punkt(s) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), tTxtH, tGr, text.align_center, 0, "EMA-Cloud: " + (s == 1 ? "Long" : s == -1 ? "Short" : s == 0 ? "gegen die Cloud" : "–") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
+    zelle(c, r + 2, emaPunkt(s, pf) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), s == 0 and pf == "↓" ? tTxtH : tWarn, tGr, text.align_center, 0, "EMA-Cloud: " + (s == 1 ? "bullish" : s == -1 ? "bearish" : pf == "↑" ? "bearish, Kurs nach oben ausgebrochen" : "bullish, Kurs nach unten ausgebrochen") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
     zelle(c, r + 3, na(a) ? "–" : str.tostring(a, "#") + (kons ? " –" : steigt ? " ↑" : " ↓"), kons ? tGrau : tTxtH, grKlein)
 
 if barstate.islast and tShow
@@ -889,11 +891,11 @@ if barstate.islast and tShow
     int r = 0
 
     // Trend je Zeitrahmen
-    tfSpalte(0, r, "Daily", sD, dD, aD, aD1)
-    tfSpalte(1, r, "4h", s4, d4, a4, a41)
-    tfSpalte(2, r, "1h", s1, d1, a1h, a1h1)
-    tfSpalte(3, r, "15m", s15, d15, a15, a151)
-    tfSpalte(4, r, "5m", s5, d5, a5, a51)
+    tfSpalte(0, r, "Daily", sD, pD, dD, aD, aD1)
+    tfSpalte(1, r, "4h", s4, p4, d4, a4, a41)
+    tfSpalte(2, r, "1h", s1, p1, d1, a1h, a1h1)
+    tfSpalte(3, r, "15m", s15, p15, d15, a15, a151)
+    tfSpalte(4, r, "5m", s5, p5, d5, a5, a51)
     r += 4
 
     // Lage zu Value Area / VWAP
