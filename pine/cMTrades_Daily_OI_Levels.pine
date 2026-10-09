@@ -857,7 +857,7 @@ alertcondition(atOrderblock or atBreaker, title = "Preis an Orderblock oder Brea
 // Minimalistisch (Entwurf Chico 09.10.): Zeitrahmen als Spalten, Punkte statt Farbflächen, schwarze Schrift, dünne Linien, ohne Hintergrund
 // Struktur + Lage: ⚪ = bullish / über   ⚫ = bearish / unter   ◐ = innen   – = keine Daten
 punkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : "–"
-// EMA-Cloud (Chico 09.10.): ⚪ bullish · 🔴 bearish (Kurs in/unter der Cloud) · ◐ rot = bearish, aber nach oben ausgebrochen · ◑ = bullish, aber nach unten ausgebrochen
+// EMA-Cloud (Chico 09.10.): ⚪ bullish · 🔴 bearish (Kurs in/unter der Cloud) · ◐ rot = bearish, aber nach oben ausgebrochen · ◑ weiß = bullish, aber nach unten ausgebrochen
 emaPunkt(int s, string pf) => s == 1 ? "⚪" : s == -1 ? "🔴" : s == 0 ? (pf == "↑" ? "◐" : "◑") : "–"
 vaSt(hi, lo) => na(hi) or na(lo) ? 2 : close > hi ? 1 : close < lo ? -1 : 0
 vwSt(v) => na(v) ? 2 : close > v ? 1 : -1
@@ -883,7 +883,7 @@ tfSpalte(int c, int r, string name, int s, string pf, int sd, float a, float aV)
     steigt = not na(aV) and a > aV
     zelle(c, r, name, tTxtH, tGr, text.align_center, 1)
     zelle(c, r + 1, "EMA · ST", tGrau, grKlein)
-    zelle(c, r + 2, emaPunkt(s, pf) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), s == 0 and pf == "↓" ? tTxtH : tWarn, tGr, text.align_center, 0, "EMA-Cloud: " + (s == 1 ? "bullish" : s == -1 ? "bearish" : pf == "↑" ? "bearish, Kurs nach oben ausgebrochen" : "bullish, Kurs nach unten ausgebrochen") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
+    zelle(c, r + 2, emaPunkt(s, pf) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), s == 0 and pf == "↓" ? color.white : tWarn, tGr, text.align_center, 0, "EMA-Cloud: " + (s == 1 ? "bullish" : s == -1 ? "bearish" : pf == "↑" ? "bearish, Kurs nach oben ausgebrochen" : "bullish, Kurs nach unten ausgebrochen") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
     zelle(c, r + 3, na(a) ? "–" : str.tostring(a, "#") + (kons ? " –" : steigt ? " ↑" : " ↓"), kons ? tGrau : tTxtH, grKlein)
 
 if barstate.islast and tShow
