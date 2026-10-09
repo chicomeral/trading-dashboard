@@ -199,6 +199,7 @@ sNY   = input.session("1530-2200", "New York (DE)", group = "VWAP")
 oiAbst  = input.int(8, "Label-Abstand OI (Bars rechts)", group = "Allgemein")
 zeichAb = input.string("Heute", "Zonen/Linien zeichnen ab", options = ["Heute", "Ganzer Chart"], group = "Allgemein", tooltip = "Heute = ab 00:00 nach rechts. Der Chart bleibt links frei anklickbar (Zurücksetzen, eigene Zeichnungen)")
 txtGr   = input.string(size.small, "Textgröße", options = [size.tiny, size.small, size.normal], group = "Allgemein")
+nahPkt  = input.float(600, "Levels nur zeigen bis ± Punkte vom Kurs (0 = alle)", minval = 0, group = "Allgemein", tooltip = "Weit entfernte Levels (z. B. Vormonat, Sonderlevels) ziehen sonst die Preisskala auseinander und der Chart wird gestaucht. 0 = alle zeigen")
 
 // ── Trend-Tabelle ──────────────────────────────────────────
 tShow = input.bool(true, "Trend-Tabelle", group = "Trend-Tabelle")
@@ -472,6 +473,8 @@ aufraeumen() =>
     boxen.clear()
     labels.clear()
 
+nah(p) => nahPkt <= 0 or math.abs(p - close) <= nahPkt
+
 stilVon(s) => s == "gestrichelt" ? line.style_dashed : s == "gepunktet" ? line.style_dotted : line.style_solid
 
 // "21,1k" → 21100 · "466" → 466
@@ -545,7 +548,7 @@ if barstate.islast
             teile = str.split(z, "|")
             kopf  = str.split(str.trim(teile.get(0)), ",")
             preis0 = str.tonumber(str.trim(kopf.get(0)))
-            if not na(preis0) and kopf.size() > 1
+            if not na(preis0) and kopf.size() > 1 and nah(preis0)
                 name   = str.trim(kopf.get(1))
                 preis  = str.startswith(name, "EM") ? preis0 : liveP(preis0)
                 if str.startswith(name, "EM")
@@ -616,7 +619,7 @@ if barstate.islast
                 if typ == "VAL"
                     valT := per == 0 ? p : valT
                     valW := per == 1 ? p : valW
-                if istHVN ? st.hvn : istPOC ? st.poc : st.va
+                if (istHVN ? st.hvn : istPOC ? st.poc : st.va) and nah(p)
                     col = istHVN ? st.cHVN : istPOC ? st.cPOC : st.cVA
                     glowLinie(p, col, col, istHVN ? st.wHVN : istPOC ? st.wPOC : st.wVA, istHVN ? st.sHVN : istPOC ? st.sPOC : st.sVA, glowVol)
                     txtR(p, typ + " " + st.kz + (vpPreis ? "  " + str.tostring(p, "#") : ""), col)
