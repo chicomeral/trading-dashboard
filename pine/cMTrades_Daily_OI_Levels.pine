@@ -30,7 +30,6 @@ vpPreis  = input.bool(true, "Preis im Label", group = gVP, inline = "lb")
 vpTab    = input.bool(true, "Profil-Werte in Tabelle", group = gVP, inline = "lb")
 
 // Je Bereich: an/aus · Daten · Zeilengröße · Value Area % · HVN-Empfindlichkeit · VAH/VAL · POC · HVN (Farbe, Linie, Dicke)
-stilOpt = ["durchgezogen", "gestrichelt", "gepunktet"]
 hvnTip  = "HVN = Berge im Volumenprofil. Höhere Zahl = mehr und kleinere Berge (feiner). Niedrige Zahl = nur die großen Berge. Der POC-Berg selbst ist schon die POC-Linie"
 datTip  = "Aus welchem Zeitrahmen das Volumen kommt. Kleiner = genauer (wie FRVP), braucht aber mehr Historie. Tag 1 · Woche 5 · Monat 30 passt für NQ"
 
@@ -44,15 +43,15 @@ pT_sen  = input.int(5, "HVN Empfindl.", minval = 1, maxval = 10, group = gT, inl
 pT_max  = input.int(6, "max HVN", minval = 0, maxval = 15, group = gT, inline = "t2")
 pT_sVA  = input.bool(true, "VAH/VAL", group = gT, inline = "t3")
 pT_cVA  = input.color(#ffffff, "", group = gT, inline = "t3")
-pT_lVA  = input.string("gestrichelt", "", options = stilOpt, group = gT, inline = "t3")
+pT_lVA  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gT, inline = "t3")
 pT_wVA  = input.int(1, "", minval = 1, maxval = 4, group = gT, inline = "t3")
 pT_sPC  = input.bool(true, "POC     ", group = gT, inline = "t4")
 pT_cPC  = input.color(#8c2f3c, "", group = gT, inline = "t4")
-pT_lPC  = input.string("gestrichelt", "", options = stilOpt, group = gT, inline = "t4")
+pT_lPC  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gT, inline = "t4")
 pT_wPC  = input.int(2, "", minval = 1, maxval = 4, group = gT, inline = "t4")
 pT_sHV  = input.bool(true, "HVN     ", group = gT, inline = "t5")
 pT_cHV  = input.color(#1c1c1c, "", group = gT, inline = "t5")
-pT_lHV  = input.string("gepunktet", "", options = stilOpt, group = gT, inline = "t5")
+pT_lHV  = input.string("gepunktet", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gT, inline = "t5")
 pT_wHV  = input.int(1, "", minval = 1, maxval = 4, group = gT, inline = "t5")
 
 gW      = "Volumen WOCHE · Vorwoche"
@@ -64,15 +63,15 @@ pW_sen  = input.int(5, "HVN Empfindl.", minval = 1, maxval = 10, group = gW, inl
 pW_max  = input.int(6, "max HVN", minval = 0, maxval = 15, group = gW, inline = "w2")
 pW_sVA  = input.bool(true, "VAH/VAL", group = gW, inline = "w3")
 pW_cVA  = input.color(color.new(#ffffff, 35), "", group = gW, inline = "w3")
-pW_lVA  = input.string("gestrichelt", "", options = stilOpt, group = gW, inline = "w3")
+pW_lVA  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gW, inline = "w3")
 pW_wVA  = input.int(1, "", minval = 1, maxval = 4, group = gW, inline = "w3")
 pW_sPC  = input.bool(true, "POC     ", group = gW, inline = "w4")
 pW_cPC  = input.color(#8c2f3c, "", group = gW, inline = "w4")
-pW_lPC  = input.string("gestrichelt", "", options = stilOpt, group = gW, inline = "w4")
+pW_lPC  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gW, inline = "w4")
 pW_wPC  = input.int(2, "", minval = 1, maxval = 4, group = gW, inline = "w4")
 pW_sHV  = input.bool(true, "HVN     ", group = gW, inline = "w5")
 pW_cHV  = input.color(#3a3a3a, "", group = gW, inline = "w5")
-pW_lHV  = input.string("gepunktet", "", options = stilOpt, group = gW, inline = "w5")
+pW_lHV  = input.string("gepunktet", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gW, inline = "w5")
 pW_wHV  = input.int(1, "", minval = 1, maxval = 4, group = gW, inline = "w5")
 
 gM      = "Volumen MONAT · Vormonat"
@@ -84,15 +83,15 @@ pM_sen  = input.int(5, "HVN Empfindl.", minval = 1, maxval = 10, group = gM, inl
 pM_max  = input.int(6, "max HVN", minval = 0, maxval = 15, group = gM, inline = "m2")
 pM_sVA  = input.bool(true, "VAH/VAL", group = gM, inline = "m3")
 pM_cVA  = input.color(#c9c9c6, "", group = gM, inline = "m3")
-pM_lVA  = input.string("gestrichelt", "", options = stilOpt, group = gM, inline = "m3")
+pM_lVA  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gM, inline = "m3")
 pM_wVA  = input.int(1, "", minval = 1, maxval = 4, group = gM, inline = "m3")
 pM_sPC  = input.bool(true, "POC     ", group = gM, inline = "m4")
 pM_cPC  = input.color(#8c2f3c, "", group = gM, inline = "m4")
-pM_lPC  = input.string("gestrichelt", "", options = stilOpt, group = gM, inline = "m4")
+pM_lPC  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gM, inline = "m4")
 pM_wPC  = input.int(2, "", minval = 1, maxval = 4, group = gM, inline = "m4")
 pM_sHV  = input.bool(true, "HVN     ", group = gM, inline = "m5")
 pM_cHV  = input.color(#6b6e76, "", group = gM, inline = "m5")
-pM_lHV  = input.string("gepunktet", "", options = stilOpt, group = gM, inline = "m5")
+pM_lHV  = input.string("gepunktet", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gM, inline = "m5")
 pM_wHV  = input.int(1, "", minval = 1, maxval = 4, group = gM, inline = "m5")
 
 // ── Glow / Verlauf ─────────────────────────────────────────
@@ -168,7 +167,7 @@ cEM       = input.color(#1c1c1c, "", group = "OI-Zonen", inline = "em")
 vaBox   = input.string("Säule rechts", "Value Area anzeigen als", options = ["Säule rechts", "Hintergrund", "aus"], group = "Value Area Säule", tooltip = "Säule rechts = schmale senkrechte Säule VAL–VAH neben der letzten Kerze (Chart bleibt frei)")
 vaSAbst = input.int(15, "Säule Abstand (Bars)", minval = 1, maxval = 200, group = "Value Area Säule", inline = "sa")
 vaSBr   = input.int(2, "Dicke", minval = 1, maxval = 6, group = "Value Area Säule", inline = "sa")
-vaSStil = input.string("durchgezogen", "Säule Linie", options = stilOpt, group = "Value Area Säule")
+vaSStil = input.string("durchgezogen", "Säule Linie", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = "Value Area Säule")
 vaSTr   = input.int(40, "Säule Transparenz", minval = 0, maxval = 100, group = "Value Area Säule")
 boxTr   = input.int(80, "Box-Transparenz (Hintergrund)", minval = 0, maxval = 100, group = "Value Area Säule")
 
