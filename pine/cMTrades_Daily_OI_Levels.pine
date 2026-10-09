@@ -146,20 +146,16 @@ G10 = "⑩ TABELLE · Aussehen"
 tShow    = input.bool(true, "Tabelle anzeigen", group = G10)
 tPos  = input.string(position.top_right, "Position", options = [position.top_left, position.top_center, position.top_right, position.middle_right, position.bottom_left, position.bottom_center, position.bottom_right], group = G10)
 tGr   = input.string(size.normal, "Textgröße Tabelle", options = [size.small, size.normal, size.large], group = G10)
-tBg      = input.color(#00000000, "Hintergrund Tabelle", group = G10, inline = "tb", tooltip = "Standard = durchsichtig (ohne Hintergrund)")
-tZelle   = input.color(#00000000, "Zellen", group = G10, inline = "tb")
-tRahm    = input.color(#00000033, "Linien", group = G10, inline = "tr")
+tBg      = input.color(#00000000, "Hintergrund", group = G10, inline = "tb", tooltip = "Standard = durchsichtig")
+tRahm    = input.color(#5f6268, "Linien", group = G10, inline = "tb")
 tRahB    = input.int(1, "Linienstärke", minval = 0, maxval = 4, group = G10, inline = "tr")
-tFrame   = input.int(0, "Außenrahmen", minval = 0, maxval = 4, group = G10, inline = "tr")
-tTxtH    = input.color(#1c1c1c, "Schrift", group = G10, inline = "ts")
-tGrau    = input.color(#4a4d55, "Schrift klein", group = G10, inline = "ts")
-tRotTxt  = input.color(#8c2f3c, "Schrift rot", group = G10, inline = "ts")
-tLong    = input.color(#ffffff, "Long / über", group = G10, inline = "tc")
-tShort   = input.color(#9e2a3a, "Short / unter", group = G10, inline = "tc")
-tNeut    = input.color(#6b6e76, "Neutral", group = G10, inline = "tc")
-regelRot = input.color(#8c2f3c, "Banner Warnung", group = G10, inline = "bn")
-tNeutBan = input.color(#5a5d64, "Banner neutral", group = G10, inline = "bn")
+tFrame   = input.int(1, "Außenrahmen", minval = 0, maxval = 4, group = G10, inline = "tr")
+tTxtH    = input.color(#000000, "Schrift", group = G10, inline = "ts")
+tGrau    = input.color(#3a3d44, "Schrift klein", group = G10, inline = "ts")
+tWarn    = input.color(#8c2f3c, "Warnung", group = G10, inline = "ts", tooltip = "Nur für Warn-Symbole und „NICHT ERLAUBT“")
+tBreit   = input.int(0, "Spaltenbreite (% Chart, 0 = automatisch)", minval = 0, maxval = 15, group = G10)
 chkOn    = input.bool(true, "Checkliste zeigen", group = G10)
+chkText  = input.text_area("✓ Long: Zone oben verlassen\n✓ Short: Pullback in Zone, dann unten raus\n✓ Pullback nur mit Trend", "Checkliste (frei editierbar)", group = G10)
 
 G11 = "⑪ TABELLE · Trend-Logik"
 emaF  = input.int(20, "EMA schnell", group = G11, inline = "e")
@@ -173,8 +169,6 @@ riskUSD  = input.float(100, "Risiko pro Trade ($)", minval = 10, group = G12)
 slPuffer = input.int(4, "SL-Puffer hinter Zone (Ticks)", minval = 0, group = G12)
 sigBars  = input.int(30, "Signal gültig (Bars nach Zonen-Ausstieg)", minval = 1, maxval = 300, group = G12)
 scanBars = input.int(240, "Rückblick Zonen-Scan (Bars)", minval = 20, maxval = 1000, group = G12)
-cOK      = input.color(#ffffff, "Signal erlaubt", group = G12, inline = "sg")
-cNo      = input.color(#5a5a5a, "Signal nicht erlaubt", group = G12, inline = "sg")
 
 G13 = "⑬ OPTIK · Glow & Verlauf"
 glowVol = input.bool(false, "Glow Volumen-Levels", group = G13, inline = "g0")
@@ -860,73 +854,62 @@ alertcondition(atOrderblock or atBreaker, title = "Preis an Orderblock oder Brea
 
 
 // ── Trend-Tabelle ──────────────────────────────────────────
-// Minimalistisch: ohne Hintergrund, Farbe nur wo sie etwas bedeutet (Badges), wichtige Zeilen fett
-// Aufbau: TF-Raster (Trend · ADX · Struktur) → Lage VA / VWAP / Zeit → Setup-Karte mit Symbol → Checkliste → Signal (2 Zeilen)
-farbeSt(st) => st == 1 ? tLong : st == -1 ? tShort : tNeut
+// Minimalistisch (Entwurf Chico 09.10.): Zeitrahmen als Spalten, Punkte statt Farbflächen, schwarze Schrift, dünne Linien, ohne Hintergrund
+// ⚪ = Long / bullish / über   ⚫ = Short / bearish / unter   🔴 = gegen die Cloud ausgebrochen   ◐ = innen   – = keine Daten
+punkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : s == 0 ? "🔴" : "–"
 vaSt(hi, lo) => na(hi) or na(lo) ? 2 : close > hi ? 1 : close < lo ? -1 : 0
 vwSt(v) => na(v) ? 2 : close > v ? 1 : -1
-stFarbe(s) => s == 2 ? tZelle : farbeSt(s)
-// Long = weiß mit dunkelroter Schrift, Short = dunkelrot mit weißer Schrift
-stSchrift(s) => s == 1 ? tShort : s == 2 ? tGrau : color.white
-grGross = tGr == size.small ? size.normal : size.large
-grKlein = tGr == size.large ? size.normal : size.small
+lagePunkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : s == 0 ? "◐" : "–"
+grGross  = tGr == size.small ? size.normal : size.large
+grKlein  = tGr == size.large ? size.normal : size.small
 grRiesig = tGr == size.small ? size.large : size.huge
 
-var table tb = table.new(tPos, 4, 24, bgcolor = tBg, frame_color = tRahm, frame_width = tFrame, border_color = tRahm, border_width = tRahB)
+var table tb = table.new(tPos, 5, 20, bgcolor = tBg, frame_color = tRahm, frame_width = tFrame, border_color = tRahm, border_width = tRahB)
 
-zelle(int c, int r, string t, color tc, color bg, string sz, string ha = text.align_center, bool fett = false, string tip = "") =>
-    table.cell(tb, c, r, t, text_color = tc, text_size = sz, bgcolor = bg, text_halign = ha, text_formatting = fett ? text.format_bold : text.format_none, tooltip = tip)
+zelle(int c, int r, string t, color tc, string sz, string ha = text.align_center, string fmt = text.format_none, string tip = "") =>
+    table.cell(tb, c, r, t, width = tBreit, text_color = tc, text_size = sz, bgcolor = color.new(color.white, 100), text_halign = ha, text_formatting = fmt, tooltip = tip)
 
 // Zelle über mehrere Spalten (c0 … c1)
-breit(int c0, int c1, int r, string t, color tc, color bg, string sz, string ha = text.align_left, bool fett = false) =>
-    zelle(c0, r, t, tc, bg, sz, ha, fett)
+breit(int c0, int c1, int r, string t, color tc, string sz, string ha = text.align_left, string fmt = text.format_none) =>
+    zelle(c0, r, t, tc, sz, ha, fmt)
     if c1 > c0
         table.merge_cells(tb, c0, r, c1, r)
 
-// Zeile je Zeitrahmen: Name | Trend-Badge | ADX | Struktur
-tfZeile(r, name, s, pf, a, aV, sd) =>
+// Spalte je Zeitrahmen: Name / Punkte EMA + Struktur / ADX
+tfSpalte(int c, int r, string name, int s, int sd, float a, float aV) =>
     kons   = na(a) or a < adxSw
     steigt = not na(aV) and a > aV
-    adxT   = na(a) ? "–" : str.tostring(a, "#") + (kons ? "  –" : steigt ? "  ↑" : "  ↓")
-    zelle(0, r, name, tTxtH, tZelle, tGr, text.align_left, true)
-    zelle(1, r, s == 1 ? "LONG" : s == -1 ? "SHORT" : s == 0 ? "neutral " + pf : "–", stSchrift(s), stFarbe(s), tGr, text.align_center, true)
-    zelle(2, r, adxT, kons ? tGrau : tTxtH, tZelle, tGr)
-    zelle(3, r, sd == 1 ? "▲ bullish" : sd == -1 ? "▼ bearish" : "–", sd == 1 ? tTxtH : sd == -1 ? tRotTxt : tGrau, tZelle, tGr, text.align_left, sd != 0)
-
-// Lage-Paar: Name (klein) | Wert (Badge)
-lage(c, r, name, s) =>
-    zelle(c, r, name, tGrau, tZelle, grKlein, text.align_left)
-    zelle(c + 1, r, s == 1 ? "über" : s == -1 ? "unter" : s == 0 ? "innen" : "–", stSchrift(s), stFarbe(s), tGr, text.align_center, true)
+    zelle(c, r, name, tTxtH, tGr, text.align_center, text.format_bold)
+    zelle(c, r + 1, punkt(s) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), tTxtH, tGr, text.align_center, text.format_none, "EMA-Cloud: " + (s == 1 ? "Long" : s == -1 ? "Short" : s == 0 ? "gegen die Cloud" : "–") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
+    zelle(c, r + 2, na(a) ? "–" : str.tostring(a, "#") + (kons ? " –" : steigt ? " ↑" : " ↓"), kons ? tGrau : tTxtH, grKlein)
 
 if barstate.islast and tShow
-    table.clear(tb, 0, 0, 3, 23)
+    table.clear(tb, 0, 0, 4, 19)
     int r = 0
 
-    // TF-Raster
-    adxTip = "ADX:  ↑ stärker  ·  ↓ schwächer  ·  – konsolidiert (unter " + str.tostring(adxSw) + ")"
-    zelle(0, r, "TF", tGrau, tZelle, grKlein, text.align_left)
-    zelle(1, r, "TREND", tGrau, tZelle, grKlein)
-    zelle(2, r, "ADX ⓘ", tGrau, tZelle, grKlein, text.align_center, false, adxTip)
-    zelle(3, r, "STRUKTUR", tGrau, tZelle, grKlein, text.align_left)
-    r += 1
-    tfZeile(r, "Daily", sD, pD, aD, aD1, dD)
-    tfZeile(r + 1, "4h", s4, p4, a4, a41, d4)
-    tfZeile(r + 2, "1h", s1, p1, a1h, a1h1, d1)
-    tfZeile(r + 3, "15m", s15, p15, a15, a151, d15)
-    tfZeile(r + 4, "5m", s5, p5, a5, a51, d5)
-    r += 5
+    // Trend je Zeitrahmen
+    tfSpalte(0, r, "Daily", sD, dD, aD, aD1)
+    tfSpalte(1, r, "4h", s4, d4, a4, a41)
+    tfSpalte(2, r, "1h", s1, d1, a1h, a1h1)
+    tfSpalte(3, r, "15m", s15, d15, a15, a151)
+    tfSpalte(4, r, "5m", s5, d5, a5, a51)
+    r += 3
 
-    // Lage zu Value Area / VWAP + Handelszeit
+    // Lage zu Value Area / VWAP
     vT = vaSt(vahT, valT)
     vW = vaSt(vahW, valW)
-    lage(0, r, "VA Tag", vT)
-    lage(2, r, "VA Woche", vW)
-    lage(0, r + 1, "VWAP Tag", vwSt(vwT))
-    lage(2, r + 1, "VWAP Woche", vwSt(vwW))
-    lage(0, r + 2, "VWAP Monat", vwSt(vwM))
-    zelle(2, r + 2, "Zeit", tGrau, tZelle, grKlein, text.align_left)
-    zelle(3, r + 2, handel ? "OK" : "AUS", handel ? tShort : color.white, handel ? tLong : tShort, tGr, text.align_center, true)
-    r += 3
+    vM = vaSt(mVah, mVal)
+    zelle(0, r, "VA T", tGrau, grKlein)
+    zelle(1, r, "VA W", tGrau, grKlein)
+    zelle(2, r, "VA M", tGrau, grKlein)
+    zelle(3, r, "VWAP T", tGrau, grKlein)
+    zelle(4, r, "VWAP W", tGrau, grKlein)
+    zelle(0, r + 1, lagePunkt(vT), tGrau, tGr)
+    zelle(1, r + 1, lagePunkt(vW), tGrau, tGr)
+    zelle(2, r + 1, lagePunkt(vM), tGrau, tGr)
+    zelle(3, r + 1, lagePunkt(vwSt(vwT)), tGrau, tGr)
+    zelle(4, r + 1, lagePunkt(vwSt(vwW)), tGrau, tGr)
+    r += 2
 
     // Setup-Karte (Chico 06.10. + 08.10.): VA-Lage + EMA-Cloud 5m/15m → eine klare Ansage + Symbol
     emaDir = s5 == -1 and s15 == -1 ? -1 : s5 == 1 and s15 == 1 ? 1 : 0
@@ -934,56 +917,34 @@ if barstate.islast and tShow
     hoeher = sD == emaDir and s4 == emaDir
     string bTitel = ""
     string bSub   = ""
-    string bAns   = ""
     string bSym   = ""
-    color  bSymBg = tNeut
-    color  bSymTx = color.white
-    bool   bRot   = true
+    color  bSymC  = tTxtH
     if not handel
-        bTitel := "⛔  KEINE TRADES"
-        bSub   := "außerhalb Handelszeit"
-        bAns   := "WARTEN"
-        bSym   := "◷"
-        bSymBg := tShort
+        bTitel := "KEINE TRADES"
+        bSub   := "außerhalb Handelszeit ◷"
+        bSym   := "⛔"
     else if vaDir != 0 and emaDir != 0 and vaDir != emaDir
-        bTitel := "⚠  SETUP-KONFLIKT"
-        bSub   := "VA " + (vaDir == 1 ? "darüber" : "darunter") + " · 5m+15m " + (emaDir == 1 ? "bullish" : "bearish")
-        bAns   := "KEIN TRADE"
+        bTitel := "KEIN TRADE"
+        bSub   := "Konflikt: VA " + (vaDir == 1 ? "darüber" : "darunter") + " · 5m+15m " + (emaDir == 1 ? "bullish" : "bearish")
         bSym   := "≈"
-        bSymBg := tShort
+        bSymC  := tWarn
     else if emaDir != 0
-        bTitel := hoeher ? "✔  SETUP KLAR" : "⚠  SETUP-KONFLIKT"
-        bSub   := "5m+15m " + (emaDir == 1 ? "bullish" : "bearish") + (hoeher ? " · D/4h passen" : " · D/4h dagegen")
-        bAns   := emaDir == 1 ? "NUR LONGS" : "NUR SHORTS"
-        bRot   := not (hoeher and emaDir == 1)
+        bTitel := emaDir == 1 ? "NUR LONGS" : "NUR SHORTS"
+        bSub   := "5m+15m " + (emaDir == 1 ? "bullish" : "bearish") + (hoeher ? " · D/4h passen" : " · D/4h dagegen ⚠")
         bSym   := emaDir == 1 ? "▲" : "▼"
-        bSymBg := emaDir == 1 ? tLong : tShort
-        bSymTx := emaDir == 1 ? tShort : color.white
     else if vaDir != 0
-        bTitel := "⚠  MISCHVERHÄLTNIS"
-        bSub   := "VA T+W " + (vaDir == 1 ? "darüber" : "darunter")
-        bAns   := vaDir == 1 ? "NUR LONG-BREAKS" : "NUR SHORT-BREAKS"
+        bTitel := vaDir == 1 ? "NUR LONG-BREAKS" : "NUR SHORT-BREAKS"
+        bSub   := "Mischverhältnis · VA T+W " + (vaDir == 1 ? "darüber" : "darunter")
         bSym   := vaDir == 1 ? "△" : "▽"
-        bSymBg := vaDir == 1 ? tLong : tShort
-        bSymTx := vaDir == 1 ? tShort : color.white
     else
-        bTitel := "◆  MISCHVERHÄLTNIS"
-        bSub   := "5m / 15m uneinig"
-        bAns   := "NUR BREAKS"
-        bRot   := false
+        bTitel := "NUR BREAKS"
+        bSub   := "Mischverhältnis · 5m / 15m uneinig"
         bSym   := "⇅"
-    bBg = bRot ? regelRot : tNeutBan
-    breit(0, 2, r, bTitel, color.white, bBg, grGross, text.align_left, true)
-    breit(0, 1, r + 1, bSub, color.new(color.white, 15), bBg, grKlein)
-    breit(2, 2, r + 1, bAns, color.white, bBg, tGr, text.align_center, true)
-    zelle(3, r, bSym, bSymTx, bSymBg, grRiesig, text.align_center, true)
-    table.merge_cells(tb, 3, r, 3, r + 1)
+    breit(0, 3, r, bTitel, tTxtH, grGross, text.align_center, text.format_bold + text.format_italic)
+    breit(0, 3, r + 1, bSub, tGrau, grKlein, text.align_center)
+    zelle(4, r, bSym, bSymC, grRiesig, text.align_center, text.format_bold)
+    table.merge_cells(tb, 4, r, 4, r + 1)
     r += 2
-
-    // Checkliste (eine Zelle, klein)
-    if chkOn
-        breit(0, 3, r, "✓  Long: Zone oben verlassen\n✓  Short: Pullback in Zone, dann unten raus\n✓  Pullback nur mit Trend", tGrau, tZelle, grKlein)
-        r += 1
 
     // Live-Signal: letzter Zonen-Ausstieg (egal wo der Preis jetzt ist)
     int    bestJ  = scanBars + 1
@@ -1039,21 +1000,23 @@ if barstate.islast and tShow
         // Abstand vom Zonenrand in Ticks (wie weit der Preis schon gelaufen ist)
         abst   = math.round((sDir == 1 ? close - sKante : sKante - close) / syminfo.mintick)
         grund  = not handel ? "außerhalb Handelszeit" : not dirOK ? "Richtung verboten" : not typOK ? "Pullback gegen Trend" : "alle Regeln erfüllt"
-        sigBg  = ok ? cOK : regelRot
-        sigTx  = ok ? color.black : color.white
-        // Zeile 1: Richtung · Typ · Zone | Status
-        breit(0, 2, r, (sDir == 1 ? "▲  LONG " : "▼  SHORT ") + (sBreak ? "BREAK" : "PULLBACK") + "  ·  " + sZone, sigTx, sigBg, tGr, text.align_left, true)
-        zelle(3, r, ok ? "ERLAUBT" : "NICHT ERLAUBT", sigTx, sigBg, grKlein, text.align_center, true)
+        // Zeile 1: Richtung · Typ · Zone | ✓ / ✗
+        breit(0, 3, r, (sDir == 1 ? "▲ LONG " : "▼ SHORT ") + (sBreak ? "BREAK" : "PULLBACK") + " · " + sZone, ok ? tTxtH : tWarn, tGr, text.align_left, text.format_bold)
+        zelle(4, r, ok ? "✓" : "✗", ok ? tTxtH : tWarn, grGross, text.align_center, text.format_bold)
         // Zeile 2: Grund · Abstand · Risiko · Kontrakte
-        breit(0, 3, r + 1, grund + "  ·  " + (abst >= 0 ? "+" : "") + str.tostring(abst) + " T von Zone  ·  Risiko " + str.tostring(ticks) + " T = $" + str.tostring(proK, "#") + "  ·  " + (anz < 1 ? "SL zu weit" : "max " + str.tostring(anz) + " Kontr."), sigTx, sigBg, grKlein, text.align_left, true)
+        breit(0, 4, r + 1, grund + " · " + (abst >= 0 ? "+" : "") + str.tostring(abst) + " T · Risiko " + str.tostring(ticks) + " T = $" + str.tostring(proK, "#") + " · " + (anz < 1 ? "SL zu weit" : "max " + str.tostring(anz) + " Kontr."), tTxtH, grKlein, text.align_left, text.format_bold)
         r += 2
     else
-        breit(0, 3, r, "◇  Kein Signal  ·  letzte " + str.tostring(sigBars) + " Bars", tGrau, tZelle, grKlein)
+        breit(0, 4, r, "◇ kein Signal", tGrau, grKlein, text.align_center)
         r += 1
 
+    // Checkliste (frei editierbar)
+    if chkOn and chkText != ""
+        breit(0, 4, r, chkText, tTxtH, grKlein, text.align_left, text.format_italic)
+        r += 1
     if szText != ""
-        breit(0, 3, r, szText, tTxtH, tZelle, grKlein)
+        breit(0, 4, r, szText, tTxtH, grKlein)
         r += 1
     if liveOn
-        breit(0, 3, r, "LIVE · Faktor " + str.tostring(fLive, "#.####") + "  (Text " + str.tostring(fBase, "#.###") + ")  ·  DP-Level Δ " + str.tostring((fLive - fBase) / fBase * close, "#.#") + " P", color.white, tNeutBan, grKlein)
+        breit(0, 4, r, "LIVE · Faktor " + str.tostring(fLive, "#.####") + " · DP Δ " + str.tostring((fLive - fBase) / fBase * close, "#.#") + " P", tGrau, grKlein)
         r += 1
