@@ -7,7 +7,7 @@
 // Tabelle: EMA-Cloud 20/50 je TF · ADX · Struktur (BOS) · Value Area T/W · VWAP T/W/M · Uhr (Handelszeit) · Setup-Banner · Signal
 // Glow: Volumen-Levels und OI-Mittellinien mit einstellbarem Leucht-Effekt, OI-Zonen mit Verlauf (Mitte kräftig, Rand weich)
 // Neu 08.10.: Orderblocks & Breakers (VEGAlgo, an/aus) · vertikale Zeitrahmen-Linien · Tabelle mit ADX + Marktstruktur (BOS)
-indicator("cMTrades - Daily OI Levels", overlay = true, max_lines_count = 500, max_boxes_count = 500, max_labels_count = 150, max_bars_back = 5000)
+indicator("cMTrades - Daily OI Levels", overlay = true, scale = scale.right, max_lines_count = 500, max_boxes_count = 500, max_labels_count = 150, max_bars_back = 5000)
 
 // ── LIVE (Chico 08.10.): OI-Levels mit Live-Faktor NQ/QQQ verschieben, Volumen bleibt ──
 liveOn  = input.bool(false, "LIVE aktiv – OI-Levels mit Live-Faktor", group = "LIVE", tooltip = "Strike = Level ÷ Faktor im Textblock (QQQ-Strikes sind ganze Zahlen) · neuer Preis = Strike × Live-Faktor. Live-Faktor = Mittel NQ/QQQ der letzten 15 Min, nur 15:30–22:00; außerhalb gilt der letzte Wert (Vormittag = Schluss gestern)")
@@ -204,12 +204,15 @@ nahPkt  = input.float(600, "Levels nur zeigen bis ± Punkte vom Kurs (0 = alle)"
 // ── Trend-Tabelle ──────────────────────────────────────────
 tShow = input.bool(true, "Trend-Tabelle", group = "Trend-Tabelle")
 tPos  = input.string(position.top_right, "Position", options = [position.top_left, position.top_center, position.top_right, position.middle_right, position.bottom_left, position.bottom_center, position.bottom_right], group = "Trend-Tabelle")
-tAbst = input.int(2, "Abstand nach unten (Leerzeilen 0–3)", minval = 0, maxval = 3, group = "Trend-Tabelle")
 tGr   = input.string(size.normal, "Textgröße Tabelle", options = [size.small, size.normal, size.large], group = "Trend-Tabelle")
-tRahm = input.color(#1e2026, "Rahmen / Zellabstand", group = "Trend-Tabelle", inline = "tr")
-tRahB = input.int(2, "Abstand (px)", minval = 0, maxval = 4, group = "Trend-Tabelle", inline = "tr")
-tDunk = input.color(#26292f, "Zellen dunkel", group = "Trend-Tabelle", inline = "td")
-tKopf = input.color(#1e2026, "Kopfzeile", group = "Trend-Tabelle", inline = "td")
+chkOn = input.bool(true, "Checkliste zeigen", group = "Trend-Tabelle")
+tKopf = input.color(#131518, "Hintergrund", group = "Trend-Tabelle", inline = "td")
+tDunk = input.color(#1c1f24, "Zellen", group = "Trend-Tabelle", inline = "td")
+tRahm = input.color(#0b0c0e, "Linien", group = "Trend-Tabelle", inline = "td")
+tRahB = input.int(1, "Linienstärke (px)", minval = 0, maxval = 4, group = "Trend-Tabelle")
+tGrau = input.color(#8b8f98, "Schrift grau", group = "Trend-Tabelle", inline = "tg")
+tRotHell = input.color(#e06c7d, "Schrift rot", group = "Trend-Tabelle", inline = "tg")
+tNeutBan = input.color(#3a3d44, "Banner neutral", group = "Trend-Tabelle", inline = "tg")
 emaF  = input.int(20, "EMA schnell", group = "Trend-Tabelle", inline = "e")
 emaS  = input.int(50, "EMA langsam", group = "Trend-Tabelle", inline = "e")
 adxLen = input.int(14, "ADX Länge", minval = 2, group = "Trend-Tabelle", inline = "x")
@@ -858,80 +861,93 @@ alertcondition(atOrderblock or atBreaker, title = "Preis an Orderblock oder Brea
 
 
 // ── Trend-Tabelle ──────────────────────────────────────────
-// Aufbau: Kopf (TF · Trend · ADX · Struktur) → Zeile je Zeitrahmen → Lage zu VA / VWAP → Setup-Banner → Checkliste → Signal → Volumen-Profil
+// Aufbau (kompakt, dunkel): Titel → TF-Raster (Trend · ADX · Struktur) → Lage VA / VWAP / Zeit → Setup-Banner → Checkliste → Signal → Profil
+// Zeilen werden fortlaufend gezählt → keine leeren Kästen
 farbeSt(st) => st == 1 ? tLong : st == -1 ? tShort : tNeut
 vaSt(hi, lo) => na(hi) or na(lo) ? 2 : close > hi ? 1 : close < lo ? -1 : 0
 vwSt(v) => na(v) ? 2 : close > v ? 1 : -1
 stFarbe(s) => s == 2 ? tDunk : farbeSt(s)
-// Long-Zelle weiß mit dunkelroter Schrift, Short-Zelle dunkelrot mit weißer Schrift
-stSchrift(s) => s == 1 ? tShort : color.white
+// Long = weiß mit dunkelroter Schrift, Short = dunkelrot mit weißer Schrift
+stSchrift(s) => s == 1 ? tShort : s == 2 ? tGrau : color.white
 grGross = tGr == size.small ? size.normal : size.large
+grKlein = tGr == size.large ? size.normal : size.small
 
-var bool gemerged = false
-var table tb = table.new(tPos, 4, 34, frame_color = tRahm, frame_width = 3, border_color = tRahm, border_width = tRahB)
+var table tb = table.new(tPos, 4, 30, bgcolor = tKopf, frame_color = tRahm, frame_width = 1, border_color = tRahm, border_width = tRahB)
 
-zelle(int c, int r, string t, color tc, color bg, string sz = size.normal, string ha = text.align_center, bool fett = false) =>
-    table.cell(tb, c, r, t, text_color = tc, text_size = sz, bgcolor = bg, text_halign = ha, text_formatting = fett ? text.format_bold : text.format_none)
+zelle(int c, int r, string t, color tc, color bg, string sz, string ha = text.align_center, bool fett = false, string tip = "") =>
+    table.cell(tb, c, r, t, text_color = tc, text_size = sz, bgcolor = bg, text_halign = ha, text_formatting = fett ? text.format_bold : text.format_none, tooltip = tip)
 
-leer(int c, int r) =>
-    table.cell(tb, c, r, "", bgcolor = color.new(color.white, 100))
+// ganze Zeile (4 Spalten verbunden)
+zeile(int r, string t, color tc, color bg, string sz, string ha = text.align_left, bool fett = false) =>
+    zelle(0, r, t, tc, bg, sz, ha, fett)
+    table.merge_cells(tb, 0, r, 3, r)
 
-// Zeile je Zeitrahmen: Name | Trend (EMA-Cloud, Pfeil = Ausbruch gegen die Cloud) | ADX-Zahl + Pfeil (– = konsolidiert) | Struktur (BOS)
+// Zeile je Zeitrahmen: Name | Trend-Pill | ADX | Struktur
 tfZeile(r, name, s, pf, a, aV, sd) =>
     kons   = na(a) or a < adxSw
     steigt = not na(aV) and a > aV
     adxT   = na(a) ? "–" : str.tostring(a, "#") + (kons ? "  –" : steigt ? "  ↑" : "  ↓")
-    zelle(0, r, name, color.white, tKopf, tGr, text.align_left)
-    zelle(1, r, s == 2 ? "–" : s == 1 ? "LONG" : s == -1 ? "SHORT" : "neutral " + pf, stSchrift(s), stFarbe(s), tGr, text.align_center, true)
-    zelle(2, r, adxT, kons ? color.new(color.white, 35) : color.white, kons ? tDunk : steigt ? color.new(#4a4d55, 0) : tDunk, tGr)
-    zelle(3, r, sd == 1 ? "bullish ↑" : sd == -1 ? "bearish ↓" : "–", sd == 1 ? color.black : color.white, sd == 1 ? tLong : sd == -1 ? tShort : tDunk, tGr)
+    zelle(0, r, name, tGrau, tKopf, tGr, text.align_left, true)
+    zelle(1, r, s == 1 ? "LONG" : s == -1 ? "SHORT" : s == 0 ? "neutral " + pf : "–", stSchrift(s), stFarbe(s), tGr, text.align_center, true)
+    zelle(2, r, adxT, kons ? tGrau : color.white, tDunk, tGr)
+    zelle(3, r, sd == 1 ? "▲ bullish" : sd == -1 ? "▼ bearish" : "–", sd == 1 ? color.white : sd == -1 ? tRotHell : tGrau, tDunk, tGr, text.align_left)
 
-// Lage des Kurses zu Value Area / VWAP
+// Lage-Paar: Name (grau) | Wert (farbig)
 lage(c, r, name, s) =>
-    t = s == 1 ? "über" : s == -1 ? "unter" : s == 0 ? "innen" : "–"
-    zelle(c, r, name + ":  " + t, s == 1 ? color.black : color.white, stFarbe(s), tGr, text.align_left)
+    zelle(c, r, name, tGrau, tKopf, grKlein, text.align_left)
+    zelle(c + 1, r, s == 1 ? "über" : s == -1 ? "unter" : s == 0 ? "innen" : "–", stSchrift(s), stFarbe(s), tGr, text.align_center, true)
+
+// Signal-Zeile: Schlüssel (grau) | Wert (über 3 Spalten)
+kv(int r0, string k, string v) =>
+    zelle(0, r0, k, tGrau, tDunk, grKlein, text.align_left)
+    zelle(1, r0, v, color.white, tDunk, tGr, text.align_left)
+    table.merge_cells(tb, 1, r0, 3, r0)
 
 profTxt(bool an, float poc, float vah, float val, string hvn, bool voll) =>
     hz = hvn == "" ? 0 : str.split(hvn, ",").size()
-    not an ? "aus" : na(poc) ? "keine Daten – Historie zu kurz" : "VAH " + str.tostring(vah, "#") + " · POC " + str.tostring(poc, "#") + " · VAL " + str.tostring(val, "#") + " · " + str.tostring(hz) + " HVN" + (voll ? "" : "  ⚠ unvollständig")
+    not an ? "aus" : na(poc) ? "keine Daten – Historie zu kurz" : "VAH " + str.tostring(vah, "#") + "  ·  POC " + str.tostring(poc, "#") + "  ·  VAL " + str.tostring(val, "#") + "  ·  " + str.tostring(hz) + " HVN" + (voll ? "" : "  ⚠")
 
 if barstate.islast and tShow
-    // Leerzeilen oben (Tabelle etwas tiefer)
-    if tAbst > 0
-        for r = 0 to tAbst - 1
-            for c = 0 to 3
-                leer(c, r)
-    o = tAbst
+    table.clear(tb, 0, 0, 3, 29)
+    int r = 0
 
-    // Kopf
-    zelle(0, o, "TF", color.new(color.white, 30), tKopf, size.small, text.align_left, true)
-    zelle(1, o, "TREND", color.new(color.white, 30), tKopf, size.small, text.align_center, true)
-    zelle(2, o, "ADX", color.new(color.white, 30), tKopf, size.small, text.align_center, true)
-    zelle(3, o, "STRUKTUR", color.new(color.white, 30), tKopf, size.small, text.align_center, true)
-    tfZeile(o + 1, "Daily", sD, pD, aD, aD1, dD)
-    tfZeile(o + 2, "4h", s4, p4, a4, a41, d4)
-    tfZeile(o + 3, "1h", s1, p1, a1h, a1h1, d1)
-    tfZeile(o + 4, "15m", s15, p15, a15, a151, d15)
-    tfZeile(o + 5, "5m", s5, p5, a5, a51, d5)
+    // Titel
+    zeile(r, "cMTrades  ·  " + syminfo.ticker + "  ·  " + timeframe.period, color.white, tKopf, grKlein, text.align_left, true)
+    r += 1
 
+    // TF-Raster
+    adxTip = "ADX:  ↑ stärker  ·  ↓ schwächer  ·  – konsolidiert (unter " + str.tostring(adxSw) + ")"
+    zelle(0, r, "TF", tGrau, tKopf, grKlein, text.align_left)
+    zelle(1, r, "TREND", tGrau, tKopf, grKlein)
+    zelle(2, r, "ADX ⓘ", tGrau, tKopf, grKlein, text.align_center, false, adxTip)
+    zelle(3, r, "STRUKTUR", tGrau, tKopf, grKlein, text.align_left)
+    r += 1
+    tfZeile(r, "Daily", sD, pD, aD, aD1, dD)
+    tfZeile(r + 1, "4h", s4, p4, a4, a41, d4)
+    tfZeile(r + 2, "1h", s1, p1, a1h, a1h1, d1)
+    tfZeile(r + 3, "15m", s15, p15, a15, a151, d15)
+    tfZeile(r + 4, "5m", s5, p5, a5, a51, d5)
+    r += 5
+
+    // Lage zu Value Area / VWAP + Handelszeit
     vT = vaSt(vahT, valT)
     vW = vaSt(vahW, valW)
-    lage(0, o + 6, "☰ VA Tag", vT)
-    lage(2, o + 6, "☰ VA Woche", vW)
-    lage(0, o + 7, "VWAP Tag", vwSt(vwT))
-    lage(2, o + 7, "VWAP Woche", vwSt(vwW))
-    lage(0, o + 8, "VWAP Monat", vwSt(vwM))
-    zelle(2, o + 8, handel ? "◷ Zeit:  OK" : "◷ Zeit:  AUS", handel ? color.black : color.white, handel ? tLong : tShort, tGr, text.align_left)
-    zelle(0, o + 9, "ⓘ  ADX:  ↑ stärker  ·  ↓ schwächer  ·  – konsolidiert (unter " + str.tostring(adxSw) + ")", color.new(color.white, 25), tKopf, size.small)
+    lage(0, r, "VA Tag", vT)
+    lage(2, r, "VA Woche", vW)
+    lage(0, r + 1, "VWAP Tag", vwSt(vwT))
+    lage(2, r + 1, "VWAP Woche", vwSt(vwW))
+    lage(0, r + 2, "VWAP Monat", vwSt(vwM))
+    zelle(2, r + 2, "Zeit", tGrau, tKopf, grKlein, text.align_left)
+    zelle(3, r + 2, handel ? "OK" : "AUS", handel ? tShort : color.white, handel ? tLong : tShort, tGr, text.align_center, true)
+    r += 3
 
     // Setup-Banner (Chico 06.10. + 08.10.): VA-Lage + EMA-Cloud 5m/15m → eine klare Ansage
     emaDir = s5 == -1 and s15 == -1 ? -1 : s5 == 1 and s15 == 1 ? 1 : 0
     vaDir  = vT == 1 and vW == 1 ? 1 : vT == -1 and vW == -1 ? -1 : 0
-    hoeher = (sD == emaDir or sD == 2) and (s4 == emaDir or s4 == 2)
+    hoeher = sD == emaDir and s4 == emaDir
     string bTitel = ""
     string bSub   = ""
     string bAns   = ""
-    color  bFarbe = regelRot
     bool   bRot   = true
     if not handel
         bTitel := "⛔  KEINE TRADES"
@@ -939,32 +955,35 @@ if barstate.islast and tShow
         bAns   := "WARTEN"
     else if vaDir != 0 and emaDir != 0 and vaDir != emaDir
         bTitel := "⚠  SETUP-KONFLIKT"
-        bSub   := "VA " + (vaDir == 1 ? "darüber" : "darunter") + " · 5m + 15m " + (emaDir == 1 ? "bullish" : "bearish")
+        bSub   := "VA " + (vaDir == 1 ? "darüber" : "darunter") + " · 5m+15m " + (emaDir == 1 ? "bullish" : "bearish")
         bAns   := "KEIN TRADE"
     else if emaDir != 0
         bTitel := hoeher ? "✔  SETUP KLAR" : "⚠  SETUP-KONFLIKT"
-        bSub   := "5m + 15m " + (emaDir == 1 ? "bullish" : "bearish") + (hoeher ? " · Daily/4h passen" : " · Daily/4h dagegen")
+        bSub   := "5m+15m " + (emaDir == 1 ? "bullish" : "bearish") + (hoeher ? " · D/4h passen" : " · D/4h dagegen")
         bAns   := emaDir == 1 ? "NUR LONGS" : "NUR SHORTS"
         bRot   := not (hoeher and emaDir == 1)
-        bFarbe := bRot ? regelRot : color.new(#5a5a5a, 0)
     else if vaDir != 0
         bTitel := "⚠  MISCHVERHÄLTNIS"
-        bSub   := "VA Tag + Woche " + (vaDir == 1 ? "darüber → keine Shorts" : "darunter → keine Longs")
+        bSub   := "VA T+W " + (vaDir == 1 ? "darüber" : "darunter")
         bAns   := vaDir == 1 ? "NUR LONG-BREAKS" : "NUR SHORT-BREAKS"
     else
         bTitel := "◆  MISCHVERHÄLTNIS"
         bSub   := "5m / 15m uneinig"
         bAns   := "NUR BREAKS"
         bRot   := false
-        bFarbe := color.new(#3a3a3a, 0)
-    zelle(0, o + 10, bTitel, color.white, bFarbe, grGross, text.align_left, true)
-    zelle(0, o + 11, bSub, color.new(color.white, 15), bFarbe, tGr, text.align_left)
-    zelle(0, o + 12, bAns, color.white, bRot ? #5e1c27 : #2b2b2b, grGross, text.align_center, true)
+    bBg  = bRot ? regelRot : tNeutBan
+    bBg2 = bRot ? color.new(#5e1c27, 0) : tDunk
+    zeile(r, bTitel, color.white, bBg, grGross, text.align_left, true)
+    zelle(0, r + 1, bSub, color.new(color.white, 20), bBg, grKlein, text.align_left)
+    zelle(2, r + 1, bAns, color.white, bBg2, tGr, text.align_center, true)
+    table.merge_cells(tb, 0, r + 1, 1, r + 1)
+    table.merge_cells(tb, 2, r + 1, 3, r + 1)
+    r += 2
 
-    // Checkliste
-    zelle(0, o + 13, "✅  Long: Zone oben verlassen", color.white, tDunk, tGr, text.align_left)
-    zelle(0, o + 14, "✅  Short: Pullback in Zone, dann unten raus", color.white, tDunk, tGr, text.align_left)
-    zelle(0, o + 15, "✅  Pullback nur mit Trend", color.white, tDunk, tGr, text.align_left)
+    // Checkliste (eine Zelle)
+    if chkOn
+        zeile(r, "✓  Long: Zone oben verlassen\n✓  Short: Pullback in Zone, dann unten raus\n✓  Pullback nur mit Trend", tGrau, tDunk, grKlein)
+        r += 1
 
     // Live-Signal: letzter Zonen-Ausstieg (egal wo der Preis jetzt ist)
     int    bestJ  = scanBars + 1
@@ -1005,7 +1024,6 @@ if barstate.islast and tShow
                         sSL    := d == 1 ? lo - slPuffer * syminfo.mintick : hi + slPuffer * syminfo.mintick
                         sZone  := zNm.get(zi)
                     break
-    keyC = color.new(color.white, 30)
     if sDir != 0 and bestJ <= sigBars
         // Regeln: VA-Lage + Trend, Pullback nur in Trendrichtung
         // Chico 08.10.: 5m + 15m short → KEINE Longs (gilt immer), 5m + 15m long → keine Shorts
@@ -1014,60 +1032,38 @@ if barstate.islast and tShow
         typOK  = sBreak or sDir == emaDir
         ok     = dirOK and typOK and handel
         ticks  = math.round(math.abs(close - sSL) / syminfo.mintick)
-        tickV  = syminfo.pointvalue * syminfo.mintick
-        proK   = ticks * tickV
+        proK   = ticks * syminfo.pointvalue * syminfo.mintick
         anz    = proK > 0 ? math.floor(riskUSD / proK) : 0
         grund  = not handel ? "außerhalb Handelszeit" : not dirOK ? "Richtung verboten" : not typOK ? "Pullback gegen Trend" : "alle Regeln erfüllt"
-        kopfB  = ok ? cOK : regelRot
-        kopfT  = ok ? color.black : color.white
-        zelle(0, o + 16, (sDir == 1 ? "▲  LONG " : "▼  SHORT ") + (sBreak ? "BREAK" : "PULLBACK"), kopfT, kopfB, tGr, text.align_left, true)
-        zelle(2, o + 16, ok ? "ERLAUBT" : "NICHT ERLAUBT", color.white, ok ? #2b2b2b : #5e1c27, size.small, text.align_center, true)
-        zelle(0, o + 17, "Zone", keyC, tDunk, tGr, text.align_left)
-        zelle(1, o + 17, sZone + " · vor " + str.tostring(bestJ) + " Bars", color.white, tDunk, tGr, text.align_left)
-        zelle(0, o + 18, "Grund", keyC, tDunk, tGr, text.align_left)
-        zelle(1, o + 18, grund, color.white, tDunk, tGr, text.align_left)
-        zelle(0, o + 19, "SL", keyC, tDunk, tGr, text.align_left)
-        zelle(1, o + 19, str.tostring(sSL, "#.##"), color.white, tDunk, tGr, text.align_left)
-        zelle(0, o + 20, "Risiko", keyC, tDunk, tGr, text.align_left)
-        zelle(1, o + 20, str.tostring(ticks) + " Ticks  ·  $" + str.tostring(proK, "#") + " / Kontrakt", color.white, tDunk, tGr, text.align_left)
-        zelle(0, o + 21, "Limit", keyC, tDunk, tGr, text.align_left)
-        zelle(1, o + 21, anz < 1 ? "SL zu weit für $" + str.tostring(riskUSD, "#") : "max. " + str.tostring(anz) + " Kontrakte bei $" + str.tostring(riskUSD, "#"), color.white, tDunk, tGr, text.align_left)
+        zelle(0, r, (sDir == 1 ? "▲  LONG " : "▼  SHORT ") + (sBreak ? "BREAK" : "PULLBACK"), ok ? color.black : color.white, ok ? cOK : regelRot, tGr, text.align_left, true)
+        zelle(3, r, ok ? "ERLAUBT" : "NICHT ERLAUBT", ok ? color.black : color.white, ok ? cOK : color.new(#5e1c27, 0), grKlein, text.align_center, true)
+        table.merge_cells(tb, 0, r, 2, r)
+        r += 1
+        kv(r, "Zone", sZone + "  ·  vor " + str.tostring(bestJ) + " Bars")
+        kv(r + 1, "Grund", grund)
+        kv(r + 2, "SL", str.tostring(sSL, "#.##") + "  ·  " + str.tostring(ticks) + " Ticks  ·  $" + str.tostring(proK, "#") + " / Kontrakt")
+        kv(r + 3, "Limit", anz < 1 ? "SL zu weit für $" + str.tostring(riskUSD, "#") : "max. " + str.tostring(anz) + " Kontrakte bei $" + str.tostring(riskUSD, "#"))
+        r += 4
     else
-        zelle(0, o + 16, "◇  KEIN SIGNAL", color.white, cNo, tGr, text.align_left, true)
-        zelle(2, o + 16, "letzte " + str.tostring(sigBars) + " Bars", color.white, cNo, size.small)
-        for r = o + 17 to o + 21
-            leer(0, r)
-            leer(1, r)
+        zeile(r, "◇  Kein Signal  ·  letzte " + str.tostring(sigBars) + " Bars", tGrau, tDunk, grKlein)
+        r += 1
 
     // Volumen-Profil (was der Indikator selbst berechnet hat)
     if vpTab
-        zelle(0, o + 22, "Profil T", keyC, tDunk, size.small, text.align_left)
-        zelle(1, o + 22, vpAuto ? profTxt(pT_an, tPoc, tVah, tVal, tHvn, tVoll) : "Textblock", color.white, tDunk, size.small, text.align_left)
-        zelle(0, o + 23, "Profil W", keyC, tDunk, size.small, text.align_left)
-        zelle(1, o + 23, vpAuto ? profTxt(pW_an, wPoc, wVah, wVal, wHvn, wVoll) : "Textblock", color.white, tDunk, size.small, text.align_left)
-        zelle(0, o + 24, "Profil M", keyC, tDunk, size.small, text.align_left)
-        zelle(1, o + 24, vpAuto ? profTxt(pM_an, mPoc, mVah, mVal, mHvn, mVoll) : "Textblock", color.white, tDunk, size.small, text.align_left)
-    else
-        for r = o + 22 to o + 24
-            leer(0, r)
-            leer(1, r)
+        zelle(0, r, "Profil T", tGrau, tKopf, grKlein, text.align_left)
+        zelle(1, r, vpAuto ? profTxt(pT_an, tPoc, tVah, tVal, tHvn, tVoll) : "Textblock", color.white, tKopf, grKlein, text.align_left)
+        table.merge_cells(tb, 1, r, 3, r)
+        zelle(0, r + 1, "Profil W", tGrau, tKopf, grKlein, text.align_left)
+        zelle(1, r + 1, vpAuto ? profTxt(pW_an, wPoc, wVah, wVal, wHvn, wVoll) : "Textblock", color.white, tKopf, grKlein, text.align_left)
+        table.merge_cells(tb, 1, r + 1, 3, r + 1)
+        zelle(0, r + 2, "Profil M", tGrau, tKopf, grKlein, text.align_left)
+        zelle(1, r + 2, vpAuto ? profTxt(pM_an, mPoc, mVah, mVal, mHvn, mVoll) : "Textblock", color.white, tKopf, grKlein, text.align_left)
+        table.merge_cells(tb, 1, r + 2, 3, r + 2)
+        r += 3
 
-    zelle(0, o + 25, szText, color.white, szText == "" ? color.new(color.white, 100) : tDunk, tGr, text.align_left)
-    zelle(0, o + 26, liveOn ? "LIVE · Faktor " + str.tostring(fLive, "#.####") + "  (Text " + str.tostring(fBase, "#.###") + ")  ·  DP-Level Δ " + str.tostring((fLive - fBase) / fBase * close, "#.#") + " P" : "", color.white, liveOn ? color.new(#5a5a5a, 0) : color.new(color.white, 100), tGr, text.align_left)
-
-    if not gemerged
-        if tAbst > 0
-            for r = 0 to tAbst - 1
-                table.merge_cells(tb, 0, r, 3, r)
-        for r = o + 6 to o + 8
-            table.merge_cells(tb, 0, r, 1, r)
-            table.merge_cells(tb, 2, r, 3, r)
-        for r = o + 9 to o + 15
-            table.merge_cells(tb, 0, r, 3, r)
-        table.merge_cells(tb, 0, o + 16, 1, o + 16)
-        table.merge_cells(tb, 2, o + 16, 3, o + 16)
-        for r = o + 17 to o + 24
-            table.merge_cells(tb, 1, r, 3, r)
-        for r = o + 25 to o + 26
-            table.merge_cells(tb, 0, r, 3, r)
-        gemerged := true
+    if szText != ""
+        zeile(r, szText, color.white, tDunk, grKlein)
+        r += 1
+    if liveOn
+        zeile(r, "LIVE · Faktor " + str.tostring(fLive, "#.####") + "  (Text " + str.tostring(fBase, "#.###") + ")  ·  DP-Level Δ " + str.tostring((fLive - fBase) / fBase * close, "#.#") + " P", color.white, tNeutBan, grKlein)
+        r += 1
