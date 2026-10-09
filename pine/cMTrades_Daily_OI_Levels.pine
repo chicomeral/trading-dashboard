@@ -1,0 +1,1025 @@
+//@version=6
+// cMTrades – Daily OI Levels
+// Textblock OI:      31270,C1 -Wall | 21,1k - 466 (strong)      (C = Call/Wall, P = Put/Support, DP = Doppelzone)
+// Volumen-Levels:    NEU 09.10. – rechnet der Indikator selbst (wie FRVP): VAH / VAL / POC + HVN (Berge)
+//                    Tag = Vortag 14:00–22:00 · Woche = Vorwoche Mo 00:00 – Fr 00:00 · Monat = Vormonat (alles DE-Zeit)
+//                    Textblock bleibt als Notfall-Quelle („Volumen-Levels Quelle“ = Textblock)
+// Tabelle: EMA-Cloud 20/50 je TF · ADX · Struktur (BOS) · Value Area T/W · VWAP T/W/M · Uhr (Handelszeit) · Setup-Banner · Signal
+// Glow: Volumen-Levels und OI-Mittellinien mit einstellbarem Leucht-Effekt, OI-Zonen mit Verlauf (Mitte kräftig, Rand weich)
+// Neu 08.10.: Orderblocks & Breakers (VEGAlgo, an/aus) · vertikale Zeitrahmen-Linien · Tabelle mit ADX + Marktstruktur (BOS)
+indicator("cMTrades - Daily OI Levels", overlay = true, scale = scale.right, max_lines_count = 500, max_boxes_count = 500, max_labels_count = 150, max_bars_back = 5000)
+
+// ═════════════════════════════ EINSTELLUNGEN ═════════════════════════════
+// Gruppen sind nummeriert ① … ⑯ – so sieht man in den Einstellungen sofort, wo man ist
+
+G1 = "① OI-LEVELS · Textblöcke"
+oiText  = input.text_area("31492,C2 -Wall | 11,5k - 3,8k\n31285,C3 -Wall | 4,5k - 3,6k\n31244,DP1 -Doppelzone | 21,1k - 23,1k (strong)\n31160,P2 -Support | 4,4k - 4,6k", "OI-Levels Textblock", group = G1)
+sonText = input.text_area("32321,C↑ -Wall | 8,2k - 26 (außerhalb Range)\n32114,C↑ -Wall | 7,9k - 15 (außerhalb Range)\n31906,C↑ -Wall | 5,9k - 390 (außerhalb Range)\n31699,C↑ -Wall | 7,9k - 767 (außerhalb Range)\n31673,EM↑ -Expected Move | ±275 P bis 09.10.\n31123,EM↓ -Expected Move | ±275 P bis 09.10.\n31078,DP↓ -Doppelzone | 8,9k - 10,7k (außerhalb Range)\n31036,DP↓ -Doppelzone | 4,4k - 6,2k (außerhalb Range)\n30663,P↓ -Support | 2,7k - 7,8k (außerhalb Range)\n30249,P↓ -Support | 1,5k - 33,7k (außerhalb Range)", "Sonderlevels Textblock (außerhalb Range, EM)", group = G1)
+szText  = input.text_area("", "Szenario (Claude, jeden Morgen)", group = G1)
+
+G2 = "② OI-LEVELS · Zonen & Farben"
+zoneTicks = input.int(45, "Zonenbreite (Ticks)", minval = 1, group = G2)
+zoneTr    = input.int(72, "Zonen-Transparenz (Call/Put)", minval = 0, maxval = 100, group = G2)
+dpTr      = input.int(55, "Transparenz Doppelzone + stärkste Zone", minval = 0, maxval = 100, group = G2, tooltip = "Höher = schwächer/heller")
+cCall  = input.color(#3a3a3a, "Call / Wall", group = G2, inline = "z")
+cPut   = input.color(#ffffff, "Put / Support", group = G2, inline = "z")
+cDP    = input.color(#ffffff, "Doppelzone + stärkste Zone", group = G2, inline = "z")
+mitteTr   = input.int(55, "Mittellinie-Transparenz", minval = 0, maxval = 100, group = G2, inline = "m")
+mitteW    = input.int(1, "Breite", minval = 1, maxval = 4, group = G2, inline = "m")
+cMitte = input.color(#2b2b2b, "Mittellinie", group = G2, inline = "m")
+cText  = input.color(#1c1c1c, "Text OI", group = G2, inline = "m")
+oiInfo    = input.bool(true, "OI-Werte im Label", group = G2)
+emOn      = input.bool(true, "Expected Move (EM↑/EM↓)", group = G2, inline = "em")
+cEM       = input.color(#1c1c1c, "", group = G2, inline = "em")
+
+G3 = "③ OI-LEVELS · Live-Faktor NQ/QQQ"
+liveOn  = input.bool(false, "LIVE aktiv – OI-Levels mit Live-Faktor", group = G3, tooltip = "Strike = Level ÷ Faktor im Textblock (QQQ-Strikes sind ganze Zahlen) · neuer Preis = Strike × Live-Faktor. Live-Faktor = Mittel NQ/QQQ der letzten 15 Min, nur 15:30–22:00; außerhalb gilt der letzte Wert (Vormittag = Schluss gestern)")
+fBase   = input.float(41.437, "Faktor im Textblock", step = 0.001, group = G3)
+qqqSym  = input.symbol("NASDAQ:QQQ", "QQQ-Symbol", group = G3)
+liveMin = input.float(2.0, "Levels erst verschieben ab (Punkte)", minval = 0.5, group = G3)
+
+G4 = "④ VOLUMEN · Allgemein"
+vpQuelle = input.string("Automatisch", "Volumen-Levels Quelle", options = ["Automatisch", "Textblock"], group = G4, tooltip = "Automatisch = der Indikator rechnet VAH / VAL / POC / HVN selbst aus dem Volumen (wie FRVP, Ticks pro Zeile). Textblock = alte Variante zum Einfügen")
+vpWoEnde = input.string("Fr 00:00", "Woche endet (Start immer Mo 00:00)", options = ["Fr 00:00", "Fr 22:00", "Sa 00:00"], group = G4, tooltip = "Fr 00:00 = Mo–Do · Fr 22:00 = inkl. Freitag bis Börsenschluss · Sa 00:00 = ganze Woche")
+vpPreis  = input.bool(false, "Preis im Label", group = G4)
+volText = input.text_area("", "Volumen-Levels Textblock (nur wenn Quelle = Textblock)", group = G4, tooltip = "Format wie früher: 31350,VAH T | Volumen Vortag  (T = Vortag, W = Vorwoche, M = Vormonat)")
+oiAlle  = oiText + "\n" + sonText
+hvnTip  = "HVN = Berge im Volumenprofil. Höhere Zahl = mehr und kleinere Berge (feiner). Niedrige Zahl = nur die großen Berge. Der POC-Berg selbst ist schon die POC-Linie"
+datTip  = "Aus welchem Zeitrahmen das Volumen kommt. Kleiner = genauer (wie FRVP), braucht aber mehr Historie. Tag 1 · Woche 5 · Monat 30 passt für NQ"
+
+gT = "⑤ VOLUMEN · Tag (Vortag 14–22)"
+pT_an   = input.bool(true, "Tag an", group = gT, inline = "t0")
+pT_ses  = input.session("1400-2200", "Session (DE)", group = gT, inline = "t0")
+pT_tf   = input.timeframe("1", "Daten", group = gT, inline = "t1", tooltip = datTip)
+pT_row  = input.int(7, "Ticks/Zeile", minval = 1, maxval = 200, group = gT, inline = "t1")
+pT_va   = input.float(70, "Value Area %", minval = 50, maxval = 95, group = gT, inline = "t2")
+pT_sen  = input.int(5, "HVN Empfindl.", minval = 1, maxval = 10, group = gT, inline = "t2", tooltip = hvnTip)
+pT_max  = input.int(6, "max HVN", minval = 0, maxval = 15, group = gT, inline = "t2")
+pT_sVA  = input.bool(true, "VAH/VAL", group = gT, inline = "t3")
+pT_cVA  = input.color(#ffffff, "", group = gT, inline = "t3")
+pT_lVA  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gT, inline = "t3")
+pT_wVA  = input.int(1, "", minval = 1, maxval = 4, group = gT, inline = "t3")
+pT_sPC  = input.bool(true, "POC     ", group = gT, inline = "t4")
+pT_cPC  = input.color(#8c2f3c, "", group = gT, inline = "t4")
+pT_lPC  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gT, inline = "t4")
+pT_wPC  = input.int(2, "", minval = 1, maxval = 4, group = gT, inline = "t4")
+pT_sHV  = input.bool(true, "HVN     ", group = gT, inline = "t5")
+pT_cHV  = input.color(#1c1c1c, "", group = gT, inline = "t5")
+pT_lHV  = input.string("gepunktet", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gT, inline = "t5")
+pT_wHV  = input.int(1, "", minval = 1, maxval = 4, group = gT, inline = "t5")
+
+gW = "⑥ VOLUMEN · Woche (Vorwoche)"
+pW_an   = input.bool(true, "Woche an", group = gW, inline = "w0")
+pW_tf   = input.timeframe("5", "Daten", group = gW, inline = "w1", tooltip = datTip)
+pW_row  = input.int(7, "Ticks/Zeile", minval = 1, maxval = 400, group = gW, inline = "w1")
+pW_va   = input.float(70, "Value Area %", minval = 50, maxval = 95, group = gW, inline = "w2")
+pW_sen  = input.int(5, "HVN Empfindl.", minval = 1, maxval = 10, group = gW, inline = "w2", tooltip = hvnTip)
+pW_max  = input.int(6, "max HVN", minval = 0, maxval = 15, group = gW, inline = "w2")
+pW_sVA  = input.bool(true, "VAH/VAL", group = gW, inline = "w3")
+pW_cVA  = input.color(#ffffffa6, "", group = gW, inline = "w3")
+pW_lVA  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gW, inline = "w3")
+pW_wVA  = input.int(1, "", minval = 1, maxval = 4, group = gW, inline = "w3")
+pW_sPC  = input.bool(true, "POC     ", group = gW, inline = "w4")
+pW_cPC  = input.color(#8c2f3c, "", group = gW, inline = "w4")
+pW_lPC  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gW, inline = "w4")
+pW_wPC  = input.int(2, "", minval = 1, maxval = 4, group = gW, inline = "w4")
+pW_sHV  = input.bool(true, "HVN     ", group = gW, inline = "w5")
+pW_cHV  = input.color(#3a3a3a, "", group = gW, inline = "w5")
+pW_lHV  = input.string("gepunktet", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gW, inline = "w5")
+pW_wHV  = input.int(1, "", minval = 1, maxval = 4, group = gW, inline = "w5")
+
+gM = "⑦ VOLUMEN · Monat (Vormonat)"
+pM_an   = input.bool(true, "Monat an", group = gM, inline = "m0")
+pM_tf   = input.timeframe("30", "Daten", group = gM, inline = "m1", tooltip = datTip)
+pM_row  = input.int(7, "Ticks/Zeile", minval = 1, maxval = 800, group = gM, inline = "m1")
+pM_va   = input.float(70, "Value Area %", minval = 50, maxval = 95, group = gM, inline = "m2")
+pM_sen  = input.int(5, "HVN Empfindl.", minval = 1, maxval = 10, group = gM, inline = "m2", tooltip = hvnTip)
+pM_max  = input.int(6, "max HVN", minval = 0, maxval = 15, group = gM, inline = "m2")
+pM_sVA  = input.bool(true, "VAH/VAL", group = gM, inline = "m3")
+pM_cVA  = input.color(#c9c9c6, "", group = gM, inline = "m3")
+pM_lVA  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gM, inline = "m3")
+pM_wVA  = input.int(1, "", minval = 1, maxval = 4, group = gM, inline = "m3")
+pM_sPC  = input.bool(true, "POC     ", group = gM, inline = "m4")
+pM_cPC  = input.color(#8c2f3c, "", group = gM, inline = "m4")
+pM_lPC  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gM, inline = "m4")
+pM_wPC  = input.int(2, "", minval = 1, maxval = 4, group = gM, inline = "m4")
+pM_sHV  = input.bool(true, "HVN     ", group = gM, inline = "m5")
+pM_cHV  = input.color(#6b6e76, "", group = gM, inline = "m5")
+pM_lHV  = input.string("gepunktet", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gM, inline = "m5")
+pM_wHV  = input.int(1, "", minval = 1, maxval = 4, group = gM, inline = "m5")
+
+G8 = "⑧ VOLUMEN · Value-Area-Säule"
+vaBox   = input.string("Säule rechts", "Value Area anzeigen als", options = ["Säule rechts", "Hintergrund", "aus"], group = G8, tooltip = "Säule rechts = schmale senkrechte Säule VAL–VAH neben der letzten Kerze (Chart bleibt frei)")
+vaSAbst = input.int(15, "Säule Abstand (Bars)", minval = 1, maxval = 200, group = G8, inline = "sa")
+vaSBr   = input.int(2, "Dicke", minval = 1, maxval = 6, group = G8, inline = "sa")
+vaSStil = input.string("durchgezogen", "Säule Linie", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = G8)
+vaSTr   = input.int(40, "Säule Transparenz", minval = 0, maxval = 100, group = G8)
+boxTr   = input.int(80, "Box-Transparenz (Hintergrund)", minval = 0, maxval = 100, group = G8)
+cBoxT  = input.color(#5f6268, "VA Vortag (Säule/Hintergrund)", group = G8, inline = "b")
+cBoxW  = input.color(#3a3a3a, "VA Woche (Säule/Hintergrund)", group = G8, inline = "b")
+
+G9 = "⑨ VWAP"
+vwStart = input.string("14:00", "Daily VWAP Start (DE)", options = ["14:00", "00:00"], group = G9)
+vT_on = input.bool(true,  "VWAP Tag",   group = G9, inline = "1")
+vT_c  = input.color(#1c1c1c, "", group = G9, inline = "1")
+vT_w  = input.int(1, "Dicke", minval = 1, maxval = 4, group = G9, inline = "1")
+vW_on = input.bool(true,  "VWAP Woche", group = G9, inline = "2")
+vW_c  = input.color(#ffffff, "", group = G9, inline = "2")
+vW_w  = input.int(1, "Dicke", minval = 1, maxval = 4, group = G9, inline = "2")
+vM_on = input.bool(false, "VWAP Monat", group = G9, inline = "3")
+vM_c  = input.color(#8c2f3c, "", group = G9, inline = "3")
+vM_w  = input.int(1, "Dicke", minval = 1, maxval = 4, group = G9, inline = "3")
+vA_on = input.bool(false, "VWAP Asia",  group = G9, inline = "4")
+vA_c  = input.color(#5f6268, "", group = G9, inline = "4")
+vA_w  = input.int(1, "Dicke", minval = 1, maxval = 4, group = G9, inline = "4")
+vL_on = input.bool(false, "VWAP London", group = G9, inline = "5")
+vL_c  = input.color(#5f6268, "", group = G9, inline = "5")
+vL_w  = input.int(1, "Dicke", minval = 1, maxval = 4, group = G9, inline = "5")
+vN_on = input.bool(false, "VWAP New York", group = G9, inline = "6")
+vN_c  = input.color(#5f6268, "", group = G9, inline = "6")
+vN_w  = input.int(1, "Dicke", minval = 1, maxval = 4, group = G9, inline = "6")
+sAsia = input.session("0000-0800", "Asia (DE)", group = G9)
+sLon  = input.session("0800-1530", "London (DE)", group = G9)
+sNY   = input.session("1530-2200", "New York (DE)", group = G9)
+
+G10 = "⑩ TABELLE · Aussehen"
+tShow    = input.bool(true, "Tabelle anzeigen", group = G10)
+tPos  = input.string(position.top_right, "Position", options = [position.top_left, position.top_center, position.top_right, position.middle_right, position.bottom_left, position.bottom_center, position.bottom_right], group = G10)
+tGr   = input.string(size.normal, "Textgröße Tabelle", options = [size.small, size.normal, size.large], group = G10)
+tBg      = input.color(#00000000, "Hintergrund", group = G10, inline = "tb", tooltip = "Standard = durchsichtig")
+tRahm    = input.color(#5f6268, "Linien", group = G10, inline = "tb")
+tRahB    = input.int(1, "Linienstärke", minval = 0, maxval = 4, group = G10, inline = "tr")
+tFrame   = input.int(1, "Außenrahmen", minval = 0, maxval = 4, group = G10, inline = "tr")
+tTxtH    = input.color(#000000, "Schrift", group = G10, inline = "ts")
+tGrau    = input.color(#3a3d44, "Schrift klein", group = G10, inline = "ts")
+tWarn    = input.color(#8c2f3c, "Warnung", group = G10, inline = "ts", tooltip = "Nur für Warn-Symbole und „NICHT ERLAUBT“")
+tBreit   = input.int(0, "Spaltenbreite (% Chart, 0 = automatisch)", minval = 0, maxval = 15, group = G10)
+chkOn    = input.bool(true, "Checkliste zeigen", group = G10)
+chkText  = input.text_area("✓ Long: Zone oben verlassen\n✓ Short: Pullback in Zone, dann unten raus\n✓ Pullback nur mit Trend", "Checkliste (frei editierbar)", group = G10)
+
+G11 = "⑪ TABELLE · Trend-Logik"
+emaF  = input.int(20, "EMA schnell", group = G11, inline = "e")
+emaS  = input.int(50, "EMA langsam", group = G11, inline = "e")
+adxLen = input.int(14, "ADX Länge", minval = 2, group = G11, inline = "x")
+adxSw  = input.int(20, "konsolidiert unter", minval = 5, maxval = 40, group = G11, inline = "x")
+strLen = input.int(3, "Struktur: Swing-Länge (Kerzen)", minval = 1, maxval = 10, group = G11, tooltip = "Swing-Punkte aus Kerzenkörpern (Dochte zählen nicht). BOS erst bei Schlusskurs über/unter dem Swing")
+
+G12 = "⑫ TABELLE · Signal & Risiko"
+riskUSD  = input.float(100, "Risiko pro Trade ($)", minval = 10, group = G12)
+slPuffer = input.int(4, "SL-Puffer hinter Zone (Ticks)", minval = 0, group = G12)
+sigBars  = input.int(30, "Signal gültig (Bars nach Zonen-Ausstieg)", minval = 1, maxval = 300, group = G12)
+scanBars = input.int(240, "Rückblick Zonen-Scan (Bars)", minval = 20, maxval = 1000, group = G12)
+
+G13 = "⑬ OPTIK · Glow & Verlauf"
+glowVol = input.bool(false, "Glow Volumen-Levels", group = G13, inline = "g0")
+glowOI  = input.bool(false, "Glow OI-Mittellinien", group = G13, inline = "g0")
+glowLag = input.int(3, "Glow Stufen", minval = 1, maxval = 6, group = G13, inline = "g1", tooltip = "Anzahl Leucht-Schichten um die Linie (mehr = weicher Verlauf)")
+glowBr  = input.int(3, "Breite je Stufe (px)", minval = 1, maxval = 10, group = G13, inline = "g1")
+glowTr  = input.int(82, "Glow Transparenz (innen)", minval = 0, maxval = 99, group = G13, tooltip = "Niedriger = kräftigeres Leuchten. Außen wird es automatisch weicher")
+glowEig = input.bool(false, "Eigene Glow-Farbe", group = G13, inline = "gf", tooltip = "Aus = jede Linie leuchtet in ihrer eigenen Farbe")
+glowCol = input.color(#ffffff, "", group = G13, inline = "gf")
+zVerl   = input.bool(true, "OI-Zonen mit Verlauf (Mitte kräftig, Rand weich)", group = G13, inline = "zv")
+zVerlN  = input.int(4, "Stufen", minval = 2, maxval = 8, group = G13, inline = "zv")
+
+G14 = "⑭ CHART · Allgemein"
+oiAbst  = input.int(8, "Label-Abstand OI (Bars rechts)", group = G14)
+zeichAb = input.string("Heute", "Zonen/Linien zeichnen ab", options = ["Heute", "Ganzer Chart"], group = G14, tooltip = "Heute = ab 00:00 nach rechts. Der Chart bleibt links frei anklickbar (Zurücksetzen, eigene Zeichnungen)")
+txtGr   = input.string(size.small, "Textgröße", options = [size.tiny, size.small, size.normal], group = G14)
+nahPkt  = input.float(600, "Levels nur zeigen bis ± Punkte vom Kurs (0 = alle)", minval = 0, group = G14, tooltip = "Weit entfernte Levels (z. B. Vormonat, Sonderlevels) ziehen sonst die Preisskala auseinander und der Chart wird gestaucht. 0 = alle zeigen")
+
+G15 = "⑮ CHART · Vertikale Linien"
+vlOn   = input.bool(true, "Vertikale Linien an", group = G15)
+vlTf   = input.timeframe("60", "Zeitrahmen", group = G15, tooltip = "Eine Linie bei jedem Start dieses Zeitrahmens (z. B. 60 = jede volle Stunde). Muss gleich oder größer als der Chart-Zeitrahmen sein")
+vlCol  = input.color(#000000, "Farbe", group = G15, inline = "v")
+vlBr   = input.int(1, "Dicke", minval = 1, maxval = 3, group = G15, inline = "v")
+vlStil = input.string("gepunktet", "Linienart", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = G15)
+vlAnz  = input.int(100, "Anzahl Linien (Verlauf)", minval = 1, maxval = 300, group = G15)
+
+G16 = "⑯ ORDERBLOCKS & BREAKER (VEGAlgo)"
+obOn       = input.bool(false, "Orderblocks & Breakers anzeigen", group = G16)
+obSwing    = input.int(5, "Swing-Länge (Kerzen)", minval = 1, maxval = 50, group = G16, tooltip = "Kerzen links/rechts für Swing-High/Low")
+obRecentOn = input.bool(true, "Nur neueste zeigen", group = G16, inline = "r")
+obRecent   = input.int(10, "Anzahl", minval = 1, maxval = 50, group = G16, inline = "r")
+obShowOB   = input.bool(true, "Orderblocks", group = G16, inline = "s")
+obShowBr   = input.bool(true, "Breaker", group = G16, inline = "s")
+obChop     = input.bool(true, "Chop-Kontrolle", group = G16, tooltip = "Breaker entfernen, die mehrfach durchschlossen werden")
+cOBbullF   = input.color(color.new(color.aqua, 80), "Bullish OB (Füllung | Rahmen)", group = G16, inline = "a")
+cOBbullR   = input.color(color.aqua, "", group = G16, inline = "a")
+cOBbearF   = input.color(color.new(color.red, 80), "Bearish OB (Füllung | Rahmen)", group = G16, inline = "b")
+cOBbearR   = input.color(color.red, "", group = G16, inline = "b")
+cBRbullF   = input.color(color.new(color.blue, 80), "Bullish Breaker (Füllung | Rahmen)", group = G16, inline = "c", tooltip = "OB nach oben durchbrochen")
+cBRbullR   = input.color(color.blue, "", group = G16, inline = "c")
+cBRbearF   = input.color(color.new(color.maroon, 80), "Bearish Breaker (Füllung | Rahmen)", group = G16, inline = "d", tooltip = "OB nach unten durchbrochen")
+cBRbearR   = input.color(color.maroon, "", group = G16, inline = "d")
+
+// ── EMA-Cloud je TF: 1 = Long, -1 = Short, 0 = Ausbruch gegen die Cloud (Pfeil zeigt Richtung)
+cloud(tf) =>
+    [ef, es, c] = request.security(syminfo.tickerid, tf, [ta.ema(close, emaF), ta.ema(close, emaS), close])
+    oben  = math.max(ef, es)
+    unten = math.min(ef, es)
+    up    = ef > es
+    st    = up ? (c < unten ? 0 : 1) : (c > oben ? 0 : -1)
+    pf    = st == 0 ? (up ? "↓" : "↑") : ""
+    [st, pf]
+
+[sD, pD]   = cloud("D")
+[s4, p4]   = cloud("240")
+[s1, p1]   = cloud("60")
+[s15, p15] = cloud("15")
+[s5, p5]   = cloud("5")
+
+// ── ADX (Trendstärke) + Marktstruktur je TF ─────────────────
+// Struktur: Swings aus Kerzenkörpern (Dochte zählen nicht) · BOS erst wenn der Schlusskurs den Swing bricht · 1 = bullish, -1 = bearish
+strCalc() =>
+    [pdi, mdi, adx] = ta.dmi(adxLen, adxLen)
+    ph = ta.pivothigh(math.max(open, close), strLen, strLen)
+    pl = ta.pivotlow(math.min(open, close), strLen, strLen)
+    var float sH = na
+    var float sL = na
+    var int d = 0
+    if not na(ph)
+        sH := ph
+    if not na(pl)
+        sL := pl
+    if not na(sH) and close > sH
+        d := 1
+        sH := na
+    if not na(sL) and close < sL
+        d := -1
+        sL := na
+    [adx, adx[1], d]
+
+tfExtra(tf) =>
+    request.security(syminfo.tickerid, tf, strCalc())
+
+[aD, aD1, dD]       = tfExtra("D")
+[a4, a41, d4]       = tfExtra("240")
+[a1h, a1h1, d1]     = tfExtra("60")
+[a15, a151, d15]    = tfExtra("15")
+[a5, a51, d5]       = tfExtra("5")
+
+// ── Volumen-Profil: Berechnung (wie FRVP: feste Ticks pro Zeile, Volumen einer Kerze gleichmäßig über High–Low verteilt) ──
+// Auswertung eines fertigen Profils → POC, VAH, VAL, HVN-Liste ("31250,31355")
+vpAuswerten(map<int, float> acc, float bs, float vaPct, int sens, int hvnMax) =>
+    ks  = acc.keys()
+    lo  = int(ks.min())
+    n   = int(ks.max()) - lo + 1
+    vol = array.new<float>(n, 0.0)
+    for kk in ks
+        vol.set(kk - lo, acc.get(kk))
+    maxV = vol.max()
+    pIdx = vol.indexof(maxV)
+    // Value Area: ab POC jeweils zur volumenstärkeren Seite erweitern, bis X % erreicht sind
+    ziel = vol.sum() * vaPct / 100.0
+    vaV  = maxV
+    up   = pIdx
+    dn   = pIdx
+    while vaV < ziel and (up < n - 1 or dn > 0)
+        uV = up < n - 1 ? vol.get(up + 1) : -1.0
+        dV = dn > 0 ? vol.get(dn - 1) : -1.0
+        if uV >= dV
+            up += 1
+            vaV += uV
+        else
+            dn -= 1
+            vaV += dV
+    // HVN = Berge: Profil leicht glätten (±2 Zeilen), dann lokale Spitzen im Fenster ±span suchen
+    sm = array.new<float>(n, 0.0)
+    for i = 0 to n - 1
+        s = 0.0
+        c = 0
+        for j = math.max(0, i - 2) to math.min(n - 1, i + 2)
+            s += vol.get(j)
+            c += 1
+        sm.set(i, s / c)
+    smMax = sm.max()
+    span  = math.max(2, int(math.round(n * (11 - sens) * 0.01)))   // Empfindl. 10 → 1 % der Höhe, 1 → 10 %
+    minV  = smMax * (11 - sens) * 0.03                             // Empfindl. 10 → ab 3 % vom POC, 1 → ab 30 %
+    hIdx  = array.new<int>()
+    hVol  = array.new<float>()
+    for i = 0 to n - 1
+        v = sm.get(i)
+        if v >= minV and math.abs(i - pIdx) > span
+            berg = true
+            for j = math.max(0, i - span) to math.min(n - 1, i + span)
+                if j != i and (sm.get(j) > v or (j < i and sm.get(j) == v))
+                    berg := false
+                    break
+            if berg
+                hIdx.push(i)
+                hVol.push(v)
+    // stärkste Berge zuerst, höchstens hvnMax
+    string hvn = ""
+    int cnt = 0
+    while hVol.size() > 0 and cnt < hvnMax
+        m = hVol.indexof(hVol.max())
+        hvn += (cnt > 0 ? "," : "") + str.tostring((lo + hIdx.get(m) + 0.5) * bs, "#.##")
+        hVol.remove(m)
+        hIdx.remove(m)
+        cnt += 1
+    [(lo + pIdx + 0.5) * bs, (lo + up + 1) * bs, (lo + dn) * bs, hvn]
+
+// Sammelt Volumen pro Periode (läuft im Daten-Zeitrahmen). modus: 0 = Tag (Session), 1 = Woche, 2 = Monat
+// Liefert immer das zuletzt ABGESCHLOSSENE Profil (Vortag / Vorwoche / Vormonat) + ob es vollständig geladen war
+vpCalc(bool aktiv, int modus, int rowT, float vaPct, int sens, int hvnMax, string sess, int wEndMin) =>
+    var map<int, float> acc = map.new<int, float>()
+    var int    pKey  = na
+    var bool   voll  = false
+    var float  rPoc  = na
+    var float  rVah  = na
+    var float  rVal  = na
+    var string rHvn  = ""
+    var bool   rVoll = false
+    inSes = not na(time(timeframe.period, sess, "Europe/Berlin"))
+    if aktiv
+        bs    = rowT * syminfo.mintick
+        y     = year(time, "Europe/Berlin")
+        mo    = month(time, "Europe/Berlin")
+        wOff  = (dayofweek(time, "Europe/Berlin") + 5) % 7     // Mo = 0 … So = 6
+        tagNr = int(math.floor(timestamp("UTC", y, mo, dayofmonth(time, "Europe/Berlin")) / 86400000))
+        k     = modus == 0 ? tagNr : modus == 1 ? tagNr - wOff : y * 12 + mo
+        if na(pKey) or k != pKey
+            if acc.size() > 0
+                [a, b, c, h] = vpAuswerten(acc, bs, vaPct, sens, hvnMax)
+                rPoc  := a
+                rVah  := b
+                rVal  := c
+                rHvn  := h
+                rVoll := voll
+            acc.clear()
+            voll := not na(pKey)    // erste Periode im Chart ist meist nur halb geladen
+            pKey := k
+        wMin = wOff * 1440 + hour(time, "Europe/Berlin") * 60 + minute(time, "Europe/Berlin")
+        drin = modus == 0 ? inSes : modus == 1 ? wMin < wEndMin : true
+        if drin and volume > 0
+            b0 = int(math.floor(low / bs))
+            b1 = int(math.floor(high / bs))
+            ve = volume / (b1 - b0 + 1)
+            for b = b0 to b1
+                acc.put(b, nz(acc.get(b)) + ve)
+    [rPoc, rVah, rVal, rHvn, rVoll]
+
+vpAuto = vpQuelle == "Automatisch"
+wEnde  = vpWoEnde == "Fr 00:00" ? 4 * 1440 : vpWoEnde == "Fr 22:00" ? 4 * 1440 + 1320 : 5 * 1440
+[tPoc, tVah, tVal, tHvn, tVoll] = request.security(syminfo.tickerid, pT_tf, vpCalc(vpAuto and pT_an, 0, pT_row, pT_va, pT_sen, pT_max, pT_ses, wEnde))
+[wPoc, wVah, wVal, wHvn, wVoll] = request.security(syminfo.tickerid, pW_tf, vpCalc(vpAuto and pW_an, 1, pW_row, pW_va, pW_sen, pW_max, pT_ses, wEnde))
+[mPoc, mVah, mVal, mHvn, mVoll] = request.security(syminfo.tickerid, pM_tf, vpCalc(vpAuto and pM_an, 2, pM_row, pM_va, pM_sen, pM_max, pT_ses, wEnde))
+
+// Darstellung je Bereich (Tag / Woche / Monat)
+type VPStil
+    bool   an
+    bool   va
+    bool   poc
+    bool   hvn
+    color  cVA
+    color  cPOC
+    color  cHVN
+    string sVA
+    string sPOC
+    string sHVN
+    int    wVA
+    int    wPOC
+    int    wHVN
+    string kz
+
+// ── VWAP Tag / Woche / Monat + Sessions ────────────────────
+deH   = hour(time, "Europe/Berlin")
+deMin = deH * 60 + minute(time, "Europe/Berlin")
+deTag = dayofmonth(time, "Europe/Berlin")
+var int tagStart = 0
+if deTag != deTag[1]
+    tagStart := bar_index
+neuT  = vwStart == "14:00" ? (deMin >= 840 and (deMin[1] < 840 or deTag != deTag[1])) : deTag != deTag[1]
+vwT0  = ta.vwap(hlc3, neuT)
+vwT   = vwStart == "14:00" and deMin < 840 ? na : vwT0
+vwW   = ta.vwap(hlc3, timeframe.change("W"))
+vwM   = ta.vwap(hlc3, timeframe.change("M"))
+
+// Kein senkrechter Strich beim Neustart (erste Kerze der neuen Periode bleibt leer)
+// Session-VWAP: läuft ab Session-Start mit, außerhalb der Session keine Linie
+sesVW(sess) =>
+    inS = not na(time(timeframe.period, sess, "Europe/Berlin"))
+    v   = ta.vwap(hlc3, inS and not inS[1])
+    inS ? v : na
+
+vwAsia = sesVW(sAsia)
+vwLon  = sesVW(sLon)
+vwNY   = sesVW(sNY)
+
+plot(vT_on and not neuT ? vwT : na, "VWAP Tag", color = vT_c, linewidth = vT_w, style = plot.style_linebr)
+plot(vW_on and not timeframe.change("W") ? vwW : na, "VWAP Woche", color = vW_c, linewidth = vW_w, style = plot.style_linebr)
+plot(vM_on and not timeframe.change("M") ? vwM : na, "VWAP Monat", color = vM_c, linewidth = vM_w, style = plot.style_linebr)
+plot(vA_on ? vwAsia : na, "VWAP Asia", color = vA_c, linewidth = vA_w, style = plot.style_linebr)
+plot(vL_on ? vwLon : na, "VWAP London", color = vL_c, linewidth = vL_w, style = plot.style_linebr)
+plot(vN_on ? vwNY : na, "VWAP New York", color = vN_c, linewidth = vN_w, style = plot.style_linebr)
+
+// ── Live-Faktor NQ/QQQ (nur US-Börsenzeit, 15-Min-Mittel, mit Mindest-Verschiebung)
+qqqC  = request.security(qqqSym, timeframe.period, close, ignore_invalid_symbol = true)
+usRTH = deMin >= 930 and deMin < 1320
+var array<float> fBuf = array.new<float>()
+var float fLive = fBase
+if usRTH and not na(qqqC) and qqqC > 0
+    fBuf.push(close / qqqC)
+    if fBuf.size() > 15
+        fBuf.shift()
+    fNeu = fBuf.avg()
+    if math.abs(fNeu - fLive) * close / fLive >= liveMin
+        fLive := fNeu
+else if not usRTH
+    fBuf.clear()
+liveP(preis) => liveOn ? math.round(preis / fBase) * fLive : preis
+
+// Handelszeit (DE): 08:00–10:00 · 13:00–15:30 · 15:35–17:30 · 18:30–22:00
+handel = (deMin >= 480 and deMin < 600) or (deMin >= 780 and deMin < 930) or (deMin >= 935 and deMin < 1050) or (deMin >= 1110 and deMin < 1320)
+
+// ── Vertikale Linien: eine Linie bei jedem Start des gewählten Zeitrahmens ──
+var array<line> vlLinien = array.new<line>()
+vlChg = ta.change(time(vlTf))
+if vlOn and timeframe.isintraday and timeframe.in_seconds(vlTf) >= timeframe.in_seconds() and vlChg != 0
+    while vlLinien.size() >= vlAnz
+        vlLinien.shift().delete()
+    vlLinien.push(line.new(bar_index, low - ta.tr, bar_index, high + ta.tr, xloc.bar_index, extend.both, vlCol, vlStil == "gestrichelt" ? line.style_dashed : vlStil == "gepunktet" ? line.style_dotted : line.style_solid, vlBr))
+
+// ── Zeichnen ───────────────────────────────────────────────
+var float vahT = na
+var float valT = na
+var float vahW = na
+var float valW = na
+
+var array<line>  linien = array.new<line>()
+var array<box>   boxen  = array.new<box>()
+var array<label> labels = array.new<label>()
+// OI-Zonen für das Live-Signal (Unter-/Obergrenze, Name)
+var array<float>  zLo  = array.new<float>()
+var array<float>  zHi  = array.new<float>()
+var array<string> zNm  = array.new<string>()
+// Volumen-Levels (Preis, Typ VAH/VAL/POC/HVN, Bereich 0 = Tag, 1 = Woche, 2 = Monat)
+var array<float>  lvP   = array.new<float>()
+var array<string> lvTyp = array.new<string>()
+var array<int>    lvPer = array.new<int>()
+
+aufraeumen() =>
+    for l in linien
+        l.delete()
+    for b in boxen
+        b.delete()
+    for lb in labels
+        lb.delete()
+    linien.clear()
+    boxen.clear()
+    labels.clear()
+
+nah(p) => nahPkt <= 0 or math.abs(p - close) <= nahPkt
+
+stilVon(s) => s == "gestrichelt" ? line.style_dashed : s == "gepunktet" ? line.style_dotted : line.style_solid
+
+// "21,1k" → 21100 · "466" → 466
+kWert(t) =>
+    x = str.replace_all(str.replace_all(str.trim(t), ",", "."), "k", "")
+    v = str.tonumber(x)
+    na(v) ? 0.0 : str.contains(t, "k") ? v * 1000 : v
+
+// Summe Call + Put aus "21,1k - 466 (strong)"
+oiSumme(info) =>
+    teil = str.split(info, " - ")
+    teil.size() > 1 ? kWert(teil.get(0)) + kWert(str.split(str.trim(teil.get(1)), " ").get(0)) : 0.0
+
+x0() => zeichAb == "Heute" ? math.max(tagStart, bar_index - 4500) : bar_index - 1
+ext() => zeichAb == "Heute" ? extend.right : extend.both
+
+hLinie(y, col, w, stil) =>
+    linien.push(line.new(x0(), y, bar_index, y, extend = ext(), color = col, width = w, style = stil))
+
+// Linie mit Glow: mehrere breite, transparente Schichten (außen weich → innen kräftiger), darüber die eigentliche Linie
+glowLinie(float y, color col, color gcol, int w, string stil, bool an) =>
+    if an
+        gc = glowEig ? glowCol : gcol
+        for g = glowLag to 1
+            tr = 100.0 - (100.0 - glowTr) * (glowLag - g + 1) / glowLag
+            linien.push(line.new(x0(), y, bar_index, y, extend = ext(), color = color.new(gc, tr), width = w + g * glowBr))
+    hLinie(y, col, w, stilVon(stil))
+
+// Volumen-Labels rechtsbündig links neben den OI-Labels → nie übereinander
+txtR(y, t, col) =>
+    labels.push(label.new(bar_index + oiAbst - 1, y, t, style = label.style_label_right, color = color.new(color.white, 100), textcolor = col, size = txtGr))
+
+// VWAP-Namen klein am Linienende
+vwName(on, v, t, col) =>
+    if on and not na(v)
+        labels.push(label.new(bar_index + 1, v, t, style = label.style_label_left, color = color.new(color.white, 100), textcolor = col, size = size.tiny))
+
+txt(x, y, t, col) =>
+    labels.push(label.new(x, y, t, style = label.style_label_left, color = color.new(color.white, 100), textcolor = col, size = txtGr))
+
+lvAdd(float p, string typ, int per) =>
+    if not na(p)
+        lvP.push(p)
+        lvTyp.push(typ)
+        lvPer.push(per)
+
+lvAddProfil(float poc, float vah, float val, string hvn, int per) =>
+    lvAdd(vah, "VAH", per)
+    lvAdd(poc, "POC", per)
+    lvAdd(val, "VAL", per)
+    if hvn != ""
+        for s in str.split(hvn, ",")
+            lvAdd(str.tonumber(s), "HVN", per)
+
+if barstate.islast
+    aufraeumen()
+    zLo.clear()
+    zHi.clear()
+    zNm.clear()
+    halb = zoneTicks * syminfo.mintick / 2
+
+    // OI-Zonen: zuerst stärkste Zone des Tages (höchste Summe Call + Put) suchen
+    float maxSumme = 0.0
+    for zeile in str.split(oiAlle, "\n")
+        tz = str.split(zeile, "|")
+        if tz.size() > 1
+            maxSumme := math.max(maxSumme, oiSumme(tz.get(1)))
+    for zeile in str.split(oiAlle, "\n")
+        z = str.trim(zeile)
+        if str.contains(z, ",")
+            teile = str.split(z, "|")
+            kopf  = str.split(str.trim(teile.get(0)), ",")
+            preis0 = str.tonumber(str.trim(kopf.get(0)))
+            if not na(preis0) and kopf.size() > 1 and nah(preis0)
+                name   = str.trim(kopf.get(1))
+                preis  = str.startswith(name, "EM") ? preis0 : liveP(preis0)
+                if str.startswith(name, "EM")
+                    if emOn
+                        hLinie(preis, cEM, 1, line.style_dashed)
+                        txt(bar_index + oiAbst, preis, str.split(name, " ").get(0) + " Expected Move", cEM)
+                    continue
+                istDP  = str.startswith(name, "DP") or str.contains(str.lower(name), "doppel")
+                istPut = not istDP and str.startswith(name, "P")
+                info0  = teile.size() > 1 ? teile.get(1) : ""
+                top    = maxSumme > 0 and oiSumme(info0) == maxSumme
+                farbe  = istDP or top ? cDP : istPut ? cPut : cCall
+                info   = teile.size() > 1 ? str.trim(teile.get(1)) : ""
+                baseTr = istDP or top ? dpTr : zoneTr
+                zLo.push(preis - halb)
+                zHi.push(preis + halb)
+                zNm.push(str.split(name, " ").get(0) + " " + str.tostring(preis, "#"))
+                if zVerl
+                    // Verlauf: gestapelte Boxen von außen nach innen → Mitte kräftig, Rand weich
+                    trS = math.min(99.0, 100 - (100 - baseTr) * 1.5 / zVerlN)
+                    for s = zVerlN to 1
+                        hs = halb * s / zVerlN
+                        boxen.push(box.new(x0(), preis + hs, bar_index, preis - hs, border_color = na, bgcolor = color.new(farbe, trS), extend = ext()))
+                else
+                    boxen.push(box.new(x0(), preis + halb, bar_index, preis - halb, border_color = na, bgcolor = color.new(farbe, baseTr), extend = ext()))
+                glowLinie(preis, color.new(cMitte, mitteTr), farbe, mitteW, "durchgezogen", glowOI)
+                txt(bar_index + oiAbst, preis, name + (oiInfo and info != "" ? " | " + info : ""), cText)
+
+    // Volumen-Levels sammeln (automatisch berechnet oder aus dem Textblock)
+    lvP.clear()
+    lvTyp.clear()
+    lvPer.clear()
+    if vpAuto
+        lvAddProfil(tPoc, tVah, tVal, tHvn, 0)
+        lvAddProfil(wPoc, wVah, wVal, wHvn, 1)
+        lvAddProfil(mPoc, mVah, mVal, mHvn, 2)
+    else
+        for zeile in str.split(volText, "\n")
+            z = str.trim(zeile)
+            if str.contains(z, ",")
+                kopf  = str.split(str.trim(str.split(z, "|").get(0)), ",")
+                preis = str.tonumber(str.trim(kopf.get(0)))
+                if not na(preis) and kopf.size() > 1
+                    name = str.trim(kopf.get(1))
+                    per  = str.endswith(name, " M") ? 2 : str.endswith(name, " W") or str.contains(str.lower(name), "woche") ? 1 : 0
+                    typ  = str.contains(name, "HVN") ? "HVN" : str.contains(name, "POC") ? "POC" : str.contains(name, "VAH") ? "VAH" : str.contains(name, "VAL") ? "VAL" : ""
+                    if typ != ""
+                        lvAdd(preis, typ, per)
+
+    stile = array.from(VPStil.new(pT_an, pT_sVA, pT_sPC, pT_sHV, pT_cVA, pT_cPC, pT_cHV, pT_lVA, pT_lPC, pT_lHV, pT_wVA, pT_wPC, pT_wHV, "T"), VPStil.new(pW_an, pW_sVA, pW_sPC, pW_sHV, pW_cVA, pW_cPC, pW_cHV, pW_lVA, pW_lPC, pW_lHV, pW_wVA, pW_wPC, pW_wHV, "W"), VPStil.new(pM_an, pM_sVA, pM_sPC, pM_sHV, pM_cVA, pM_cPC, pM_cHV, pM_lVA, pM_lPC, pM_lHV, pM_wVA, pM_wPC, pM_wHV, "M"))
+
+    vahT := na
+    valT := na
+    vahW := na
+    valW := na
+    if lvP.size() > 0
+        for i = 0 to lvP.size() - 1
+            per = lvPer.get(i)
+            st  = stile.get(per)
+            typ = lvTyp.get(i)
+            p   = lvP.get(i)
+            istHVN = typ == "HVN"
+            istPOC = typ == "POC"
+            if st.an
+                if typ == "VAH"
+                    vahT := per == 0 ? p : vahT
+                    vahW := per == 1 ? p : vahW
+                if typ == "VAL"
+                    valT := per == 0 ? p : valT
+                    valW := per == 1 ? p : valW
+                if (istHVN ? st.hvn : istPOC ? st.poc : st.va) and nah(p)
+                    col = istHVN ? st.cHVN : istPOC ? st.cPOC : st.cVA
+                    glowLinie(p, col, col, istHVN ? st.wHVN : istPOC ? st.wPOC : st.wVA, istHVN ? st.sHVN : istPOC ? st.sPOC : st.sVA, glowVol)
+                    txtR(p, typ + " " + st.kz + (vpPreis ? "  " + str.tostring(p, "#") : ""), col)
+
+    // VWAP-Namen klein am Linienende
+    vwName(vT_on, vwT, "VWAP T", vT_c)
+    vwName(vW_on, vwW, "VWAP W", vW_c)
+    vwName(vM_on, vwM, "VWAP M", vM_c)
+    vwName(vA_on, vwAsia, "VWAP Asia", vA_c)
+    vwName(vL_on, vwLon, "VWAP London", vL_c)
+    vwName(vN_on, vwNY, "VWAP NY", vN_c)
+
+    if vaBox == "Hintergrund"
+        if not na(vahW) and not na(valW)
+            boxen.push(box.new(x0(), vahW, bar_index, valW, border_color = na, bgcolor = color.new(cBoxW, boxTr), extend = ext()))
+        if not na(vahT) and not na(valT)
+            boxen.push(box.new(x0(), vahT, bar_index, valT, border_color = na, bgcolor = color.new(cBoxT, boxTr), extend = ext()))
+    if vaBox == "Säule rechts"
+        xT = bar_index + vaSAbst
+        xW = xT + 2
+        if not na(vahT) and not na(valT)
+            linien.push(line.new(xT, vahT, xT, valT, color = color.new(cBoxT, vaSTr), width = vaSBr, style = stilVon(vaSStil)))
+        if not na(vahW) and not na(valW)
+            linien.push(line.new(xW, vahW, xW, valW, color = color.new(cBoxW, vaSTr), width = vaSBr, style = stilVon(vaSStil)))
+
+
+// ── Orderblocks & Breakers (VEGAlgo, MPL 2.0) – Logik unverändert, nur an/aus + Anzeige am letzten Bar ──
+type Orderblock
+    box boxObj
+    float top
+    float bottom
+    int startBar
+    bool isBullish
+    bool isBreaker
+    bool wasOriginallyBullish
+
+type PendingOB
+    float level
+    int obBar
+    float obTop
+    float obBottom
+    bool isBullish
+    int breachBar
+
+isSwingHigh = ta.pivothigh(high, obSwing, obSwing)
+isSwingLow  = ta.pivotlow(low, obSwing, obSwing)
+
+var float lastSwingHigh = na
+var float lastSwingLow = na
+var int lastSwingHighBar = na
+var int lastSwingLowBar = na
+var bool swingHighBreached = false
+var bool swingLowBreached = false
+var array<Orderblock> orderblocks = array.new<Orderblock>()
+var array<PendingOB> pendingOBs = array.new<PendingOB>()
+bool atOrderblock = false
+bool atBreaker = false
+
+if obOn
+    if not na(isSwingHigh)
+        lastSwingHigh := isSwingHigh
+        lastSwingHighBar := bar_index - obSwing
+        swingHighBreached := false
+
+    if not na(isSwingLow)
+        lastSwingLow := isSwingLow
+        lastSwingLowBar := bar_index - obSwing
+        swingLowBreached := false
+
+    highBreached = not na(lastSwingHigh) and not swingHighBreached and high > lastSwingHigh
+    lowBreached = not na(lastSwingLow) and not swingLowBreached and low < lastSwingLow
+
+    if highBreached
+        swingHighBreached := true
+
+    if lowBreached
+        swingLowBreached := true
+
+    // Letzte bärische Kerze vor dem Bruch merken
+    if highBreached
+        alreadyPending = false
+        if array.size(pendingOBs) > 0
+            for j = 0 to array.size(pendingOBs) - 1
+                existingPending = array.get(pendingOBs, j)
+                if existingPending.isBullish and math.abs(existingPending.level - lastSwingHigh) < 0.0001
+                    alreadyPending := true
+                    break
+
+        if not alreadyPending
+            for i = 1 to 50
+                if bar_index - i <= lastSwingHighBar
+                    break
+                if close[i] < open[i]
+                    pending = PendingOB.new(
+                         level = lastSwingHigh,
+                         obBar = bar_index - i,
+                         obTop = high[i],
+                         obBottom = low[i],
+                         isBullish = true,
+                         breachBar = bar_index
+                     )
+                    array.push(pendingOBs, pending)
+                    break
+
+    // Letzte bullische Kerze vor dem Bruch merken
+    if lowBreached
+        alreadyPending = false
+        if array.size(pendingOBs) > 0
+            for j = 0 to array.size(pendingOBs) - 1
+                existingPending = array.get(pendingOBs, j)
+                if not existingPending.isBullish and math.abs(existingPending.level - lastSwingLow) < 0.0001
+                    alreadyPending := true
+                    break
+
+        if not alreadyPending
+            for i = 1 to 50
+                if bar_index - i <= lastSwingLowBar
+                    break
+                if close[i] > open[i]
+                    pending = PendingOB.new(
+                         level = lastSwingLow,
+                         obBar = bar_index - i,
+                         obTop = high[i],
+                         obBottom = low[i],
+                         isBullish = false,
+                         breachBar = bar_index
+                     )
+                    array.push(pendingOBs, pending)
+                    break
+
+    // Pending-OBs per Schlusskurs bestätigen
+    bullishMSB = not na(lastSwingHigh) and close > lastSwingHigh and close[1] <= lastSwingHigh
+    bearishMSB = not na(lastSwingLow) and close < lastSwingLow and close[1] >= lastSwingLow
+
+    if array.size(pendingOBs) > 0
+        for i = array.size(pendingOBs) - 1 to 0
+            pending = array.get(pendingOBs, i)
+
+            if pending.isBullish and bullishMSB and math.abs(pending.level - lastSwingHigh) < 0.0001
+                newBox = box.new(
+                     left = pending.obBar,
+                     top = pending.obTop,
+                     right = bar_index + 50,
+                     bottom = pending.obBottom,
+                     border_color = cOBbullR,
+                     bgcolor = cOBbullF,
+                     border_width = 1,
+                     extend = extend.right
+                 )
+                ob = Orderblock.new(newBox, pending.obTop, pending.obBottom, pending.obBar, true, false, true)
+                array.push(orderblocks, ob)
+                array.remove(pendingOBs, i)
+
+            else if not pending.isBullish and bearishMSB and math.abs(pending.level - lastSwingLow) < 0.0001
+                newBox = box.new(
+                     left = pending.obBar,
+                     top = pending.obTop,
+                     right = bar_index + 50,
+                     bottom = pending.obBottom,
+                     border_color = cOBbearR,
+                     bgcolor = cOBbearF,
+                     border_width = 1,
+                     extend = extend.right
+                 )
+                ob = Orderblock.new(newBox, pending.obTop, pending.obBottom, pending.obBar, false, false, false)
+                array.push(orderblocks, ob)
+                array.remove(pendingOBs, i)
+
+    // Breaker + Chop-Kontrolle
+    if array.size(orderblocks) > 0
+        for i = array.size(orderblocks) - 1 to 0
+            ob = array.get(orderblocks, i)
+
+            if not ob.isBreaker
+                if ob.isBullish and close < ob.bottom
+                    ob.isBreaker := true
+                    box.set_bgcolor(ob.boxObj, cBRbearF)
+                    box.set_border_color(ob.boxObj, cBRbearR)
+                    array.set(orderblocks, i, ob)
+
+                if not ob.isBullish and close > ob.top
+                    ob.isBreaker := true
+                    box.set_bgcolor(ob.boxObj, cBRbullF)
+                    box.set_border_color(ob.boxObj, cBRbullR)
+                    array.set(orderblocks, i, ob)
+
+            else if obChop and ob.isBreaker
+                shouldRemove = false
+
+                if ob.wasOriginallyBullish
+                    if close > ob.top
+                        shouldRemove := true
+                else
+                    if close < ob.bottom
+                        shouldRemove := true
+
+                if shouldRemove
+                    box.delete(ob.boxObj)
+                    array.remove(orderblocks, i)
+
+    // Alarm-Zustände
+    if array.size(orderblocks) > 0
+        for ob in orderblocks
+            if low <= ob.top and high >= ob.bottom
+                if ob.isBreaker
+                    atBreaker := true
+                else
+                    atOrderblock := true
+
+// Anzeige (nur am letzten Bar nötig)
+if obOn and barstate.islast and array.size(orderblocks) > 0
+    int visibleCount = 0
+    for i = array.size(orderblocks) - 1 to 0
+        ob = array.get(orderblocks, i)
+        shouldShow = true
+
+        if not obShowOB and not ob.isBreaker
+            shouldShow := false
+        if not obShowBr and ob.isBreaker
+            shouldShow := false
+        if obRecentOn and visibleCount >= obRecent
+            shouldShow := false
+
+        if shouldShow
+            box.set_bgcolor(ob.boxObj, ob.isBreaker ? (ob.wasOriginallyBullish ? cBRbearF : cBRbullF) : (ob.isBullish ? cOBbullF : cOBbearF))
+            box.set_border_color(ob.boxObj, ob.isBreaker ? (ob.wasOriginallyBullish ? cBRbearR : cBRbullR) : (ob.isBullish ? cOBbullR : cOBbearR))
+            box.set_right(ob.boxObj, bar_index + 50)
+            visibleCount += 1
+        else
+            box.set_bgcolor(ob.boxObj, color.new(color.gray, 100))
+            box.set_border_color(ob.boxObj, color.new(color.gray, 100))
+
+alertcondition(atOrderblock, title = "Preis an Orderblock", message = "Preis berührt eine Orderblock-Zone")
+alertcondition(atBreaker, title = "Preis an Breaker", message = "Preis berührt eine Breaker-Zone")
+alertcondition(atOrderblock or atBreaker, title = "Preis an Orderblock oder Breaker", message = "Preis berührt eine Orderblock- oder Breaker-Zone")
+
+
+// ── Trend-Tabelle ──────────────────────────────────────────
+// Minimalistisch (Entwurf Chico 09.10.): Zeitrahmen als Spalten, Punkte statt Farbflächen, schwarze Schrift, dünne Linien, ohne Hintergrund
+// Struktur + Lage: ⚪ = bullish / über   ⚫ = bearish / unter   ◐ = innen   – = keine Daten
+punkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : "–"
+// EMA-Cloud (Chico 09.10.): ⚪ bullish · ⚫ bearish · ◑ weiß = bullish, Kurs aber unter die Cloud · ◐ schwarz = bearish, Kurs aber über die Cloud (kein Rot)
+emaPunkt(int s, string pf) => s == 1 ? "⚪" : s == -1 ? "⚫" : s == 0 ? (pf == "↑" ? "◐" : "◑") : "–"
+vaSt(hi, lo) => na(hi) or na(lo) ? 2 : close > hi ? 1 : close < lo ? -1 : 0
+vwSt(v) => na(v) ? 2 : close > v ? 1 : -1
+lagePunkt(int s) => s == 1 ? "⚪" : s == -1 ? "⚫" : s == 0 ? "◐" : "–"
+grGross  = tGr == size.small ? size.normal : size.large
+grKlein  = tGr == size.large ? size.normal : size.small
+grRiesig = tGr == size.small ? size.large : size.huge
+
+var table tb = table.new(tPos, 5, 20, bgcolor = tBg, frame_color = tRahm, frame_width = tFrame, border_color = tRahm, border_width = tRahB)
+
+zelle(int c, int r, string t, color tc, string sz, string ha = text.align_center, int fmt = 0, string tip = "") =>
+    table.cell(tb, c, r, t, width = tBreit, text_color = tc, text_size = sz, bgcolor = color.new(color.white, 100), text_halign = ha, text_formatting = fmt == 1 ? text.format_bold : fmt == 2 ? text.format_italic : text.format_none, tooltip = tip)
+
+// Zelle über mehrere Spalten (c0 … c1)
+breit(int c0, int c1, int r, string t, color tc, string sz, string ha = text.align_left, int fmt = 0) =>
+    zelle(c0, r, t, tc, sz, ha, fmt)
+    if c1 > c0
+        table.merge_cells(tb, c0, r, c1, r)
+
+// Spalte je Zeitrahmen: Name / Beschriftung / Punkte EMA + Struktur / ADX
+tfSpalte(int c, int r, string name, int s, string pf, int sd, float a, float aV) =>
+    kons   = na(a) or a < adxSw
+    steigt = not na(aV) and a > aV
+    zelle(c, r, name, tTxtH, tGr, text.align_center, 1)
+    zelle(c, r + 1, "EMA · ST", tGrau, grKlein)
+    zelle(c, r + 2, emaPunkt(s, pf) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), s == 0 and pf == "↓" ? color.white : tTxtH, tGr, text.align_center, 0, "EMA-Cloud: " + (s == 1 ? "bullish" : s == -1 ? "bearish" : pf == "↑" ? "bearish, Kurs nach oben ausgebrochen" : "bullish, Kurs nach unten ausgebrochen") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
+    zelle(c, r + 3, na(a) ? "–" : str.tostring(a, "#") + (kons ? " –" : steigt ? " ↑" : " ↓"), kons ? tGrau : tTxtH, grKlein)
+
+if barstate.islast and tShow
+    table.clear(tb, 0, 0, 4, 19)
+    int r = 0
+
+    // Trend je Zeitrahmen
+    tfSpalte(0, r, "Daily", sD, pD, dD, aD, aD1)
+    tfSpalte(1, r, "4h", s4, p4, d4, a4, a41)
+    tfSpalte(2, r, "1h", s1, p1, d1, a1h, a1h1)
+    tfSpalte(3, r, "15m", s15, p15, d15, a15, a151)
+    tfSpalte(4, r, "5m", s5, p5, d5, a5, a51)
+    r += 4
+
+    // Lage zu Value Area / VWAP
+    vT = vaSt(vahT, valT)
+    vW = vaSt(vahW, valW)
+    vM = vaSt(mVah, mVal)
+    zelle(0, r, "VA T", tGrau, grKlein)
+    zelle(1, r, "VA W", tGrau, grKlein)
+    zelle(2, r, "VA M", tGrau, grKlein)
+    zelle(3, r, "VWAP T", tGrau, grKlein)
+    zelle(4, r, "VWAP W", tGrau, grKlein)
+    zelle(0, r + 1, lagePunkt(vT), tGrau, tGr)
+    zelle(1, r + 1, lagePunkt(vW), tGrau, tGr)
+    zelle(2, r + 1, lagePunkt(vM), tGrau, tGr)
+    zelle(3, r + 1, lagePunkt(vwSt(vwT)), tGrau, tGr)
+    zelle(4, r + 1, lagePunkt(vwSt(vwW)), tGrau, tGr)
+    r += 2
+
+    // Setup-Karte (Chico 06.10. + 08.10.): VA-Lage + EMA-Cloud 5m/15m → eine klare Ansage + Symbol
+    emaDir = s5 == -1 and s15 == -1 ? -1 : s5 == 1 and s15 == 1 ? 1 : 0
+    vaDir  = vT == 1 and vW == 1 ? 1 : vT == -1 and vW == -1 ? -1 : 0
+    hoeher = sD == emaDir and s4 == emaDir
+    string bTitel = ""
+    string bSub   = ""
+    string bSym   = ""
+    color  bSymC  = tTxtH
+    if not handel
+        bTitel := "KEINE TRADES"
+        bSub   := "außerhalb Handelszeit ◷"
+        bSym   := "⛔"
+    else if vaDir != 0 and emaDir != 0 and vaDir != emaDir
+        bTitel := "KEIN TRADE"
+        bSub   := "Konflikt: VA " + (vaDir == 1 ? "darüber" : "darunter") + " · 5m+15m " + (emaDir == 1 ? "bullish" : "bearish")
+        bSym   := "≈"
+        bSymC  := tWarn
+    else if emaDir != 0
+        bTitel := emaDir == 1 ? "NUR LONGS" : "NUR SHORTS"
+        bSub   := "5m+15m " + (emaDir == 1 ? "bullish" : "bearish") + (hoeher ? " · D/4h passen" : " · D/4h dagegen ⚠")
+        bSym   := emaDir == 1 ? "▲" : "▼"
+    else if vaDir != 0
+        bTitel := vaDir == 1 ? "NUR LONG-BREAKS" : "NUR SHORT-BREAKS"
+        bSub   := "Mischverhältnis · VA T+W " + (vaDir == 1 ? "darüber" : "darunter")
+        bSym   := vaDir == 1 ? "△" : "▽"
+    else
+        bTitel := "NUR BREAKS"
+        bSub   := "Mischverhältnis · 5m / 15m uneinig"
+        bSym   := "⇅"
+    breit(0, 3, r, bTitel, tTxtH, grGross, text.align_center, 1)
+    breit(0, 3, r + 1, bSub, tGrau, grKlein, text.align_center)
+    zelle(4, r, bSym, bSymC, grRiesig, text.align_center, 1)
+    table.merge_cells(tb, 4, r, 4, r + 1)
+    r += 2
+
+    // Live-Signal: letzter Zonen-Ausstieg (egal wo der Preis jetzt ist)
+    int    bestJ  = scanBars + 1
+    int    sDir   = 0
+    bool   sBreak = false
+    float  sSL    = na
+    string sZone  = ""
+    float  sKante = na
+    lb = math.min(scanBars, bar_index - 1)
+    if zLo.size() > 0
+        for zi = 0 to zLo.size() - 1
+            lo = zLo.get(zi)
+            hi = zHi.get(zi)
+            for j = 0 to lb - 1
+                if j >= bestJ
+                    break
+                inJ1 = close[j + 1] >= lo and close[j + 1] <= hi
+                outJ = close[j] > hi or close[j] < lo
+                // Ausstieg: vorher in der Zone und jetzt draußen – oder in einer Kerze durch die Zone gesprungen
+                sprung = (close[j + 1] < lo and close[j] > hi) or (close[j + 1] > hi and close[j] < lo)
+                if (inJ1 and outJ) or sprung
+                    // woher kam der Preis?
+                    int vonSeite = 0
+                    if sprung
+                        vonSeite := close[j + 1] < lo ? -1 : 1
+                    else
+                        for k = j + 1 to lb
+                            if close[k] < lo
+                                vonSeite := -1
+                                break
+                            if close[k] > hi
+                                vonSeite := 1
+                                break
+                    d = close[j] > hi ? 1 : -1
+                    if vonSeite != 0
+                        bestJ  := j
+                        sDir   := d
+                        sBreak := vonSeite == -d
+                        sSL    := d == 1 ? lo - slPuffer * syminfo.mintick : hi + slPuffer * syminfo.mintick
+                        sZone  := zNm.get(zi)
+                        sKante := d == 1 ? hi : lo
+                    break
+    if sDir != 0 and bestJ <= sigBars
+        // Regeln: VA-Lage + Trend, Pullback nur in Trendrichtung
+        // Chico 08.10.: 5m + 15m short → KEINE Longs (gilt immer), 5m + 15m long → keine Shorts
+        vaOK   = vaDir == 1 ? sDir == 1 : vaDir == -1 ? sDir == -1 : true
+        dirOK  = vaOK and (emaDir == 0 or sDir == emaDir)
+        typOK  = sBreak or sDir == emaDir
+        ok     = dirOK and typOK and handel
+        ticks  = math.round(math.abs(close - sSL) / syminfo.mintick)
+        proK   = ticks * syminfo.pointvalue * syminfo.mintick
+        anz    = proK > 0 ? math.floor(riskUSD / proK) : 0
+        // Abstand vom Zonenrand in Ticks (wie weit der Preis schon gelaufen ist)
+        abst   = math.round((sDir == 1 ? close - sKante : sKante - close) / syminfo.mintick)
+        grund  = not handel ? "außerhalb Handelszeit" : not dirOK ? "Richtung verboten" : not typOK ? "Pullback gegen Trend" : "alle Regeln erfüllt"
+        // Zeile 1: Richtung · Typ · Zone | ✓ / ✗
+        breit(0, 3, r, (sDir == 1 ? "▲ LONG " : "▼ SHORT ") + (sBreak ? "BREAK" : "PULLBACK") + " · " + sZone, ok ? tTxtH : tWarn, tGr, text.align_left, 1)
+        zelle(4, r, ok ? "✓" : "✗", ok ? tTxtH : tWarn, grGross, text.align_center, 1)
+        // Zeile 2: Grund · Abstand · Risiko · Kontrakte
+        breit(0, 4, r + 1, grund + " · " + (abst >= 0 ? "+" : "") + str.tostring(abst) + " T · Risiko " + str.tostring(ticks) + " T = $" + str.tostring(proK, "#") + " · " + (anz < 1 ? "SL zu weit" : "max " + str.tostring(anz) + " Kontr."), tTxtH, grKlein, text.align_left, 1)
+        r += 2
+    else
+        breit(0, 4, r, "◇ kein Signal", tGrau, grKlein, text.align_center)
+        r += 1
+
+    // Checkliste (frei editierbar)
+    if chkOn and chkText != ""
+        breit(0, 4, r, chkText, tTxtH, grKlein, text.align_left, 2)
+        r += 1
+    if szText != ""
+        breit(0, 4, r, szText, tTxtH, grKlein)
+        r += 1
+    if liveOn
+        breit(0, 4, r, "LIVE · Faktor " + str.tostring(fLive, "#.####") + " · DP Δ " + str.tostring((fLive - fBase) / fBase * close, "#.#") + " P", tGrau, grKlein)
+        r += 1
