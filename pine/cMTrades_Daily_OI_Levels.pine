@@ -62,7 +62,7 @@ pW_va   = input.float(70, "Value Area %", minval = 50, maxval = 95, group = gW, 
 pW_sen  = input.int(5, "HVN Empfindl.", minval = 1, maxval = 10, group = gW, inline = "w2", tooltip = hvnTip)
 pW_max  = input.int(6, "max HVN", minval = 0, maxval = 15, group = gW, inline = "w2")
 pW_sVA  = input.bool(true, "VAH/VAL", group = gW, inline = "w3")
-pW_cVA  = input.color(color.new(#ffffff, 35), "", group = gW, inline = "w3")
+pW_cVA  = input.color(#ffffffa6, "", group = gW, inline = "w3")
 pW_lVA  = input.string("gestrichelt", "", options = ["durchgezogen", "gestrichelt", "gepunktet"], group = gW, inline = "w3")
 pW_wVA  = input.int(1, "", minval = 1, maxval = 4, group = gW, inline = "w3")
 pW_sPC  = input.bool(true, "POC     ", group = gW, inline = "w4")
@@ -268,8 +268,8 @@ vpAuswerten(map<int, float> acc, float bs, float vaPct, int sens, int hvnMax) =>
     lo  = int(ks.min())
     n   = int(ks.max()) - lo + 1
     vol = array.new<float>(n, 0.0)
-    for [kk, vv] in acc
-        vol.set(kk - lo, vv)
+    for kk in ks
+        vol.set(kk - lo, acc.get(kk))
     maxV = vol.max()
     pIdx = vol.indexof(maxV)
     // Value Area: ab POC jeweils zur volumenstärkeren Seite erweitern, bis X % erreicht sind
