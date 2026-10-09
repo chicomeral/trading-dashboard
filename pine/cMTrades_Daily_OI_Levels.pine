@@ -866,11 +866,11 @@ grRiesig = tGr == size.small ? size.large : size.huge
 
 var table tb = table.new(tPos, 5, 20, bgcolor = tBg, frame_color = tRahm, frame_width = tFrame, border_color = tRahm, border_width = tRahB)
 
-zelle(int c, int r, string t, color tc, string sz, string ha = text.align_center, string fmt = text.format_none, string tip = "") =>
-    table.cell(tb, c, r, t, width = tBreit, text_color = tc, text_size = sz, bgcolor = color.new(color.white, 100), text_halign = ha, text_formatting = fmt, tooltip = tip)
+zelle(int c, int r, string t, color tc, string sz, string ha = text.align_center, int fmt = 0, string tip = "") =>
+    table.cell(tb, c, r, t, width = tBreit, text_color = tc, text_size = sz, bgcolor = color.new(color.white, 100), text_halign = ha, text_formatting = fmt == 1 ? text.format_bold : fmt == 2 ? text.format_italic : text.format_none, tooltip = tip)
 
 // Zelle über mehrere Spalten (c0 … c1)
-breit(int c0, int c1, int r, string t, color tc, string sz, string ha = text.align_left, string fmt = text.format_none) =>
+breit(int c0, int c1, int r, string t, color tc, string sz, string ha = text.align_left, int fmt = 0) =>
     zelle(c0, r, t, tc, sz, ha, fmt)
     if c1 > c0
         table.merge_cells(tb, c0, r, c1, r)
@@ -879,8 +879,8 @@ breit(int c0, int c1, int r, string t, color tc, string sz, string ha = text.ali
 tfSpalte(int c, int r, string name, int s, int sd, float a, float aV) =>
     kons   = na(a) or a < adxSw
     steigt = not na(aV) and a > aV
-    zelle(c, r, name, tTxtH, tGr, text.align_center, text.format_bold)
-    zelle(c, r + 1, punkt(s) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), tTxtH, tGr, text.align_center, text.format_none, "EMA-Cloud: " + (s == 1 ? "Long" : s == -1 ? "Short" : s == 0 ? "gegen die Cloud" : "–") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
+    zelle(c, r, name, tTxtH, tGr, text.align_center, 1)
+    zelle(c, r + 1, punkt(s) + " " + punkt(sd == 1 ? 1 : sd == -1 ? -1 : 2), tTxtH, tGr, text.align_center, 0, "EMA-Cloud: " + (s == 1 ? "Long" : s == -1 ? "Short" : s == 0 ? "gegen die Cloud" : "–") + "  ·  Struktur: " + (sd == 1 ? "bullish" : sd == -1 ? "bearish" : "–"))
     zelle(c, r + 2, na(a) ? "–" : str.tostring(a, "#") + (kons ? " –" : steigt ? " ↑" : " ↓"), kons ? tGrau : tTxtH, grKlein)
 
 if barstate.islast and tShow
@@ -940,9 +940,9 @@ if barstate.islast and tShow
         bTitel := "NUR BREAKS"
         bSub   := "Mischverhältnis · 5m / 15m uneinig"
         bSym   := "⇅"
-    breit(0, 3, r, bTitel, tTxtH, grGross, text.align_center, text.format_bold + text.format_italic)
+    breit(0, 3, r, bTitel, tTxtH, grGross, text.align_center, 1)
     breit(0, 3, r + 1, bSub, tGrau, grKlein, text.align_center)
-    zelle(4, r, bSym, bSymC, grRiesig, text.align_center, text.format_bold)
+    zelle(4, r, bSym, bSymC, grRiesig, text.align_center, 1)
     table.merge_cells(tb, 4, r, 4, r + 1)
     r += 2
 
@@ -1001,10 +1001,10 @@ if barstate.islast and tShow
         abst   = math.round((sDir == 1 ? close - sKante : sKante - close) / syminfo.mintick)
         grund  = not handel ? "außerhalb Handelszeit" : not dirOK ? "Richtung verboten" : not typOK ? "Pullback gegen Trend" : "alle Regeln erfüllt"
         // Zeile 1: Richtung · Typ · Zone | ✓ / ✗
-        breit(0, 3, r, (sDir == 1 ? "▲ LONG " : "▼ SHORT ") + (sBreak ? "BREAK" : "PULLBACK") + " · " + sZone, ok ? tTxtH : tWarn, tGr, text.align_left, text.format_bold)
-        zelle(4, r, ok ? "✓" : "✗", ok ? tTxtH : tWarn, grGross, text.align_center, text.format_bold)
+        breit(0, 3, r, (sDir == 1 ? "▲ LONG " : "▼ SHORT ") + (sBreak ? "BREAK" : "PULLBACK") + " · " + sZone, ok ? tTxtH : tWarn, tGr, text.align_left, 1)
+        zelle(4, r, ok ? "✓" : "✗", ok ? tTxtH : tWarn, grGross, text.align_center, 1)
         // Zeile 2: Grund · Abstand · Risiko · Kontrakte
-        breit(0, 4, r + 1, grund + " · " + (abst >= 0 ? "+" : "") + str.tostring(abst) + " T · Risiko " + str.tostring(ticks) + " T = $" + str.tostring(proK, "#") + " · " + (anz < 1 ? "SL zu weit" : "max " + str.tostring(anz) + " Kontr."), tTxtH, grKlein, text.align_left, text.format_bold)
+        breit(0, 4, r + 1, grund + " · " + (abst >= 0 ? "+" : "") + str.tostring(abst) + " T · Risiko " + str.tostring(ticks) + " T = $" + str.tostring(proK, "#") + " · " + (anz < 1 ? "SL zu weit" : "max " + str.tostring(anz) + " Kontr."), tTxtH, grKlein, text.align_left, 1)
         r += 2
     else
         breit(0, 4, r, "◇ kein Signal", tGrau, grKlein, text.align_center)
@@ -1012,7 +1012,7 @@ if barstate.islast and tShow
 
     // Checkliste (frei editierbar)
     if chkOn and chkText != ""
-        breit(0, 4, r, chkText, tTxtH, grKlein, text.align_left, text.format_italic)
+        breit(0, 4, r, chkText, tTxtH, grKlein, text.align_left, 2)
         r += 1
     if szText != ""
         breit(0, 4, r, szText, tTxtH, grKlein)
